@@ -1,0 +1,8 @@
+{
+  "input": {
+    "audio_urls": [
+      "https://example.invalid/sample.wav",
+      "https://example.invalid/sample.wav"
+    ]
+  }
+}
