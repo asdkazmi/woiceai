@@ -1,8 +1,7 @@
 {
   "input": {
-    "audio_urls": [
-      "https://example.invalid/sample.wav",
-      "https://example.invalid/sample.wav"
-    ]
+    "s3_key" : "knowledge-bases/d0ShDdb6u7M6BYC5hvxFKbnA3zo1ctMy9n1t6G7O.wav"
+
+
   }
 }
