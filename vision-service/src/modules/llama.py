@@ -1,5 +1,6 @@
 from llama_cpp import Llama
 import logging
+import time
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -15,9 +16,13 @@ llm = Llama(
 logger.info(f"llama loaded")
 def generate(messages, kwargs={}):
     try:
+        handler_start = time.time()
         response = llm.create_chat_completion(
             messages=messages  # Pass keyword arguments specific to create_chat_completion
         )
+        handler_end = time.time()
+        handler_duration = handler_end - handler_start
+        logger.info(f"the taken by llama is {handler_duration}")
         return response['choices'][0]['message']['content']
     except Exception as e:
         logger.error(f"Error generating data: {e}")

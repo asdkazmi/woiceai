@@ -39,8 +39,6 @@ RUN pip3 install --upgrade pip && \
     pip3 install llama-cpp-python==0.2.90 \
     --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu122
 
-RUN git clone https://huggingface.co/cyan2k/molmo-7B-D-bnb-4bit cyan2k/molmo-7B-D-bnb-4bit
-
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 

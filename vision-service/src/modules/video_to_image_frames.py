@@ -1,7 +1,7 @@
 import cv2
 from PIL import Image
 
-def video_to_image_array(video_path):
+def video_to_image_array(video_path, delay):
     # Create a list to store the images
     image_array = []
 
@@ -15,7 +15,7 @@ def video_to_image_array(video_path):
 
     # Get the video's frame rate
     fps = cap.get(cv2.CAP_PROP_FPS)
-    frame_interval = int(fps * 5)  # Capture one frame every 5 seconds
+    frame_interval = int(fps * delay)  # Capture one frame every delay seconds
 
     frame_count = 0  # Initialize frame counter
     while True:
