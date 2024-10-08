@@ -26,20 +26,19 @@ ENV PATH /usr/local/cuda-12.2/bin:${PATH}
 ENV LD_LIBRARY_PATH /usr/local/cuda-12.2/lib64:${LD_LIBRARY_PATH}
 
 RUN apt-get update && apt-get install git-lfs -y && \
+    apt-get install -y libsndfile1 ffmpeg &&  \
     apt-get clean && rm -rf /var/lib/apt/lists/* &&  \
-    git lfs install \
-# Verify the CUDA installation
+    git lfs install
 RUN nvcc --version
+
 
 WORKDIR /
 
-RUN pip install --upgrade pip
-
-RUN pip3 install --upgrade pip && \
-    pip3 install llama-cpp-python==0.2.90 \
-    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu122
+RUN git clone https://huggingface.co/cyan2k/molmo-7B-D-bnb-4bit cyan2k/molmo-7B-D-bnb-4bit
+RUN git clone https://huggingface.co/distil-whisper/distil-large-v3 distil-whisper/distil-large-v3
 
 COPY requirements.txt .
+COPY cartoon.mp4 .
 RUN pip install -r requirements.txt
 
 ENV HF_DATASETS_CACHE="/runpod-volume/datasets"

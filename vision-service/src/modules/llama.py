@@ -1,4 +1,4 @@
-from llama_cpp import Llama
+"""from llama_cpp import Llama
 import logging
 import time
 
@@ -26,4 +26,4 @@ def generate(messages, kwargs={}):
         return response['choices'][0]['message']['content']
     except Exception as e:
         logger.error(f"Error generating data: {e}")
-        return None
+        return None"""

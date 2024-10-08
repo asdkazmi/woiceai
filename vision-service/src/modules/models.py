@@ -14,5 +14,5 @@ arguments = {"device_map": "auto", "torch_dtype": "auto", "trust_remote_code": T
 processor = AutoProcessor.from_pretrained(repo_name, **arguments)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-logging.info(f'{repo_name}... on {device}')
+logging.info(f'Loading model {repo_name}... on {device}')
 model = AutoModelForCausalLM.from_pretrained(repo_name, **arguments)
