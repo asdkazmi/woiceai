@@ -1,6 +1,22 @@
 from .video_to_image_frames import video_to_image_array
 from .models import processor,model
 from transformers import GenerationConfig
+import requests
+
+
+def download_video_from_url(url):
+    try:
+        filename="video.mp4"
+        response = requests.get(url, stream=True)
+        if response.status_code == 200:
+            with open(filename, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
+            return filename
+    except:
+        return None
+
 
 def process_video(url, delay=1):
     video_frames = video_to_image_array(url, delay=delay)

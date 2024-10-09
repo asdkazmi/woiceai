@@ -35,8 +35,14 @@ def transcribe_video(input_file):
 
     #converting video to audio
     try:
-        ffmpeg.input(input_file).output("audio.wav").run()
-        logger.info(f"The file is successfully converted to: audio.wav")
+        probe = ffmpeg.probe(input_file)
+        # Check for audio streams
+        audio_streams = [stream for stream in probe['streams'] if stream['codec_type'] == 'audio']
+        if len(audio_streams) > 0:
+            ffmpeg.input(input_file).output("audio.wav").run()
+            logger.info(f"The file is successfully converted to: audio.wav")
+        else:
+            return None
     except Exception as e:
         logger.info(f"An error occurred: {e}")
 

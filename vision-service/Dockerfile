@@ -34,17 +34,24 @@ RUN nvcc --version
 
 WORKDIR /
 
-RUN git clone https://huggingface.co/cyan2k/molmo-7B-D-bnb-4bit cyan2k/molmo-7B-D-bnb-4bit
-RUN git clone https://huggingface.co/distil-whisper/distil-large-v3 distil-whisper/distil-large-v3
+ARG WISPER_DIR="distil-whisper/distil-large-v3"
+RUN GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/$WISPER_DIR $WISPER_DIR
+RUN wget https://huggingface.co/$WISPER_DIR/resolve/main/model.safetensors?download=true -O $WISPER_DIR/model.safetensors
+
+ARG MOLMO_DIR="cyan2k/molmo-7B-D-bnb-4bit"
+RUN GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/$MOLMO_DIR $MOLMO_DIR
+RUN wget https://huggingface.co/$MOLMO_DIR/resolve/main/model-00001-of-00002.safetensors?download=true -O $MOLMO_DIR/model-00001-of-00002.safetensors
+RUN wget https://huggingface.co/$MOLMO_DIR/resolve/main/model-00002-of-00002.safetensors?download=true -O $MOLMO_DIR/model-00002-of-00002.safetensors
 
 COPY requirements.txt .
-COPY cartoon.mp4 .
 RUN pip install -r requirements.txt
+
 
 ENV HF_DATASETS_CACHE="/runpod-volume/datasets"
 ENV HUGGINGFACE_HUB_CACHE="/runpod-volume/hub"
 ENV TRANSFORMERS_CACHE="/runpod-volume/hub"
 
 COPY src/ .
+COPY .env .
 
 CMD [ "python3", "-u", "/app.py" ]
