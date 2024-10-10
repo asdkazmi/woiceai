@@ -1,4 +1,4 @@
-This is runpod server less api which works on explaining vision.
+This is runpod server less api which works on explaining vision whether its an image or a video.
 
 This api can take one of these four inputs
 
