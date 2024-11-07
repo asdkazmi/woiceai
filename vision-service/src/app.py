@@ -7,13 +7,12 @@ from modules.process_video import download_video_from_url
 from modules.process_image import process_image
 from modules.transcribing_video import transcribe_video
 from modules.s3download import download_file_from_s3
+from modules import chunks
+from modules.credits import cost
+from modules.embedings import runpod_api_pipeline
+from modules.mongo import insert_image, insert_video
+from modules.sns import sending_message_attributes_to_sns
 from dotenv import load_dotenv
-
-from src.modules import chunks
-from src.modules.credits import cost
-from src.modules.embedings import runpod_api_pipeline
-from src.modules.mongo import insert_image, insert_video
-from src.modules.sns import sending_message_attributes_to_sns
 
 load_dotenv()
 
