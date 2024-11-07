@@ -31,6 +31,7 @@ def handler(event):
     type = payload['content_type']
     kbId = payload['kbId']
     delay = payload.get('delay', 10)  #delay in seconds to capture the screens of the video
+    execution_time_embeddings1 = 0
     if type == 'video':
         try:
             if url:
@@ -85,10 +86,7 @@ def handler(event):
             insert_video(video_description_chunks, embeddings2, kbId, s3_key)
             handler_end = time.time()
             handler_duration = handler_end - handler_start
-            if execution_time_embeddings1:
-                execution_time_embeddings = execution_time_embeddings1  + execution_time_embeddings2
-            else:
-                execution_time_embeddings = execution_time_embeddings2
+            execution_time_embeddings = execution_time_embeddings1  + execution_time_embeddings2
             credits_consumed = cost(handler_duration, execution_time_embeddings)
             message_attributes = {
                "KNOWLEDGEBASE.ID": {"DataType": "String", "StringValue": kbId},

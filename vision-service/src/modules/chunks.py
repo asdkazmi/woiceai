@@ -88,14 +88,3 @@ def split_text_into_chunks(content=None, text_file_path="", chunk_size=250, over
                     "chunk_no": prev_chunk_index + 1})
 
     return {"chunks": chunks, "indices": indices}
-
-screens_data = [
-    {'time': 0,
-     'text': ' The scene depicts a picturesque village nestled in a valley surrounded by lush green hills and snow-capped mountains. A red train is visible on a track running through the village, with houses scattered around. The sky is clear and blue, indicating a sunny day. The landscape is vibrant and green, with trees and bushes dotting the hillsides. The overall atmosphere is serene and idyllic, showcasing the beauty of nature and human settlement coexisting harmoniously. The train adds a touch of modernity to the otherwise traditional village setting.\n\nSummary: A tranquil village in a green valley, surrounded by mountains. A red train runs through, with houses and trees scattered around. Clear blue sky and sunny weather create a peaceful atmosphere.'}, {'time': 10, 'text': " The train has moved further down the track, progressing towards the right side of the image. It's now closer to the brown house with the gray roof on the right side of the village. The train's position has changed, revealing more of the surrounding landscape and emphasizing the contrast between the modern transportation and the traditional village setting."}, {'time': 20, 'text': " The train has moved further down the track, progressing towards the right side of the image. It's now closer to the brown house with the gray roof on the right side of the village. The train's position has changed, revealing more of the surrounding landscape and emphasizing the contrast between the modern transportation and the traditional village setting."}, {'time': 30, 'text': " The train has moved further down the track, progressing towards the right side of the image. It's now closer to the brown house with the gray roof on the right side of the village. The train's position has changed, revealing more of the surrounding landscape and emphasizing the contrast between the modern transportation and the traditional village setting."}]
-
-for data in screens_data:
-    text = data['text']
-    chunks = ["chunk a", "chunk b"]
-    for c in chunks:
-        meta_data = f"Keywords: scene, video description, movie, scree 1; Time: {text['time']}"
-        join_chunk_md = meta_data + '\n' + c
