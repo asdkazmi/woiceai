@@ -129,7 +129,6 @@ def handler(event):
 
             logger.info("Converting image explanation to chunks")
             all_data = chunks.split_text_into_chunks(content=text)
-            print(all_data)
             logger.info("Creating embeddings for chunks")
             embeddings, execution_time_embeddings = runpod_api_pipeline(substrings=all_data.get("chunks"), query='',
                                                                         top_k=5,
