@@ -12,8 +12,7 @@ from dotenv import load_dotenv
 from src.modules import chunks
 from src.modules.credits import cost
 from src.modules.embedings import runpod_api_pipeline
-from src.modules.mongo import insert_image, insert_video_with_transcription, \
-    insert_video_without_transcription
+from src.modules.mongo import insert_image, insert_video
 from src.modules.sns import sending_message_attributes_to_sns
 
 load_dotenv()
@@ -60,6 +59,8 @@ def handler(event):
                                                                              top_k=5,
                                                                              threshold=100,
                                                                              task='embeddings', embedings=True)
+                logger.info("Uploading to DB")
+                insert_video(transcription_chunks, embeddings1, kbId, s3_key)
             else:
                 logger.info("Video has no transcription")
 
@@ -81,10 +82,7 @@ def handler(event):
                                                                          task='embeddings', embedings=True)
 
             logger.info("Uploading to DB")
-            if transcription:
-                insert_video_with_transcription(video_description_chunks,embeddings2, kbId, s3_key,transcription_chunks, embeddings1,)
-            else:
-                insert_video_without_transcription(video_description_chunks, embeddings2, kbId, s3_key)
+            insert_video(video_description_chunks, embeddings2, kbId, s3_key)
             handler_end = time.time()
             handler_duration = handler_end - handler_start
             credits_consumed = cost(handler_duration, execution_time_embeddings)
@@ -147,14 +145,12 @@ def handler(event):
                                           "StringValue": s3_key if s3_key else url},
                 "KNOWLEDGEBASE.CONTENT_TYPE": {"DataType": "String", "StringValue": type},
                 "KNOWLEDGEBASE.STATUS": {"DataType": "String", "StringValue": "Completed"},
-                "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)},
-                "KNOWLEDGEBASE.TRANSCRIPTION": {"DataType": "String", "StringValue": text}
+                "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)}
             }
             sending_message_attributes_to_sns(message_attributes)
             return {"KNOWLEDGEBASE.ID": {"DataType": "String", "Value": kbId},
                     "KNOWLEDGEBASE.CONTENT": {"DataType": "String",
-                                              "Value": s3_key if s3_key else url,
-                                              "ImageExplanation": text},
+                                              "Value": s3_key if s3_key else url},
                     "KNOWLEDGEBASE.CONTENT_TYPE": {"DataType": "String", "Value": type},
                     "KNOWLEDGEBASE.STATUS": {"DataType": "String", "Value": "Completed"},
                     "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "Value": str(credits_consumed)}}
