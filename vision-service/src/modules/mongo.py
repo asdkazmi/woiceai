@@ -20,7 +20,7 @@ except Exception as e:
 
 # Access the 'Woice' database and the 'chunks' collection
 db = client['woice']
-collection = db['images_and_videos']
+collection = db['chunks']
 
 
 def insert_image(all_chunks, indices, embeddings, kbId, s3_key):
