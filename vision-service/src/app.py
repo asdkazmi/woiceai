@@ -55,7 +55,7 @@ def handler(event):
                 prefix = f"Keywords: Video transcription, Talk, Discussion, Said in this video,Spoken content,Conversation,Speech,Dialogue,audio content is: "
                 updated_transcription_chunks = [prefix + item for item in transcription_chunks]
                 logger.info("Creating embeddings for transcription chunks")
-                embeddings1, execution_time_embeddings = runpod_api_pipeline(substrings=updated_transcription_chunks, query='',
+                embeddings1, execution_time_embeddings1 = runpod_api_pipeline(substrings=updated_transcription_chunks, query='',
                                                                              top_k=5,
                                                                              threshold=100,
                                                                              task='embeddings', embedings=True)
@@ -76,7 +76,7 @@ def handler(event):
                     join_chunk_md = meta_data + '\n' + c
                     chunks_for_embedding.append(join_chunk_md)
             logger.info("Creating embeddings for video explanation chunks")
-            embeddings2, execution_time_embeddings = runpod_api_pipeline(substrings=chunks_for_embedding, query='',
+            embeddings2, execution_time_embeddings2 = runpod_api_pipeline(substrings=chunks_for_embedding, query='',
                                                                          top_k=5,
                                                                          threshold=100,
                                                                          task='embeddings', embedings=True)
@@ -85,6 +85,10 @@ def handler(event):
             insert_video(video_description_chunks, embeddings2, kbId, s3_key)
             handler_end = time.time()
             handler_duration = handler_end - handler_start
+            if execution_time_embeddings1:
+                execution_time_embeddings = execution_time_embeddings1  + execution_time_embeddings2
+            else:
+                execution_time_embeddings = execution_time_embeddings2
             credits_consumed = cost(handler_duration, execution_time_embeddings)
             message_attributes = {
                "KNOWLEDGEBASE.ID": {"DataType": "String", "StringValue": kbId},

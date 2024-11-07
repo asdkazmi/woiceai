@@ -4,14 +4,18 @@ import json
 
 
 def cost(handler_duration, execution_time_embeddings):
-    embeddings_cost_per_second = float(os.getenv('RUNPOD_API_COST_PER_SECOND'))
-    transcriber_cost_per_second = float(os.getenv('RUNPOD_TRANSCRIBER_COST_PER_SECOND'))
+    try:
+        embeddings_cost_per_second = float(os.getenv('RUNPOD_API_COST_PER_SECOND'))
+        cost_per_3gb_millisecond = float(os.getenv('COST_PER_3GB_MILLISECOND'))
+        lambda_cost_per_3_gb_second = cost_per_3gb_millisecond * 1000  # Per 3 GB-second cost
+        embeddings_cost = embeddings_cost_per_second * execution_time_embeddings
+        prompt_builder_cost = handler_duration * lambda_cost_per_3_gb_second
+        total_credits_cents = math.ceil((embeddings_cost + prompt_builder_cost) * 1000)
+        return total_credits_cents
 
-    embeddings_cost = embeddings_cost_per_second * execution_time_embeddings
-    prompt_builder_cost = handler_duration * transcriber_cost_per_second
-    total_credits_cents = math.ceil((embeddings_cost + prompt_builder_cost) * 1000)
-
-    return total_credits_cents
+    except Exception as e:
+        print(e)
+        return {'statusCode': 500, 'message': json.dumps({'error': f'{e}'})}
 
 
 """
