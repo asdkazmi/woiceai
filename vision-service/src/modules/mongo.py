@@ -18,9 +18,9 @@ try:
 except Exception as e:
     logger.info(e)
 
-# Access the 'Woice' database and the 'chunks' collection
-db = client['woice']
-collection = db['chunks']
+# Access the 'woice-ai-kb' database and the 'document-kb' collection
+db = client['woice-ai-kb']
+collection = db['document-kb']
 
 
 def insert_image(all_chunks, indices, embeddings, kbId, s3_key):
