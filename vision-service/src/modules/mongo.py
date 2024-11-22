@@ -31,7 +31,7 @@ def insert_image(all_chunks, indices, embeddings, kbId, s3_key,title):
         "s3_Key": s3_key,
         "datetime": datetime.datetime.now(),
         "kbId": kbId,
-        "metadata": {"chunkNo": indices[i]['chunk_no']},
+        "metadata": {"chunkNo": i+1},
         "content": all_chunks[i],
         "bgeVectors": embeddings[i]
     } for i in range(len(all_chunks))]
@@ -47,6 +47,7 @@ def insert_video(all_chunks,embeddings, kbId, s3_key,title):
         "s3_Key": s3_key,
         "datetime": datetime.datetime.now(),
         "kbId": kbId,
+        "metadata": {"chunkNo": i+1},
         "content":all_chunks[i],
         "bgeVectors":embeddings[i]
     } for i in range(len(all_chunks))]
