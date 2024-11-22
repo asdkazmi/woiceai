@@ -1,7 +1,8 @@
 {
     "input": {
-        "s3_key":"uploads/8290926-sd_960_540_30fps.mp4",
-        "content_type": "video",
-        "kbId": "657"
+        "s3_key":"uploads/image (1).png",
+        "content_type": "image",
+        "kbId": "657",
+        "title": "image.png"
     }
 }

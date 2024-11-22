@@ -30,6 +30,7 @@ def handler(event):
     type = payload['content_type']
     kbId = payload['kbId']
     delay = payload.get('delay', 10)  #delay in seconds to capture the screens of the video
+    title = payload.get('title')
     execution_time_embeddings1 = 0
     if type == 'video':
         try:
@@ -52,7 +53,7 @@ def handler(event):
                 logger.info("Converting video transcription to chunks")
                 audio_chunks = chunks.split_text_into_chunks(content=transcription)
                 transcription_chunks=audio_chunks.get("chunks")
-                prefix = f"Keywords: Video transcription, Talk, Discussion, Said in this video,Spoken content,Conversation,Speech,Dialogue,audio content is: "
+                prefix = f"File Type: Video; Video Name: {title}. Keywords: Video transcription, Talk, Discussion, Said in this video,Spoken content,Conversation,Speech,Dialogue,audio content is: "
                 updated_transcription_chunks = [prefix + item for item in transcription_chunks]
                 logger.info("Creating embeddings for transcription chunks")
                 embeddings1, execution_time_embeddings1 = runpod_api_pipeline(substrings=updated_transcription_chunks, query='',
@@ -60,7 +61,7 @@ def handler(event):
                                                                              threshold=100,
                                                                              task='embeddings', embedings=True)
                 logger.info("Uploading to DB")
-                insert_video(transcription_chunks, embeddings1, kbId, s3_key)
+                insert_video(transcription_chunks, embeddings1, kbId, s3_key, title)
             else:
                 logger.info("Video has no transcription")
 
@@ -72,7 +73,7 @@ def handler(event):
                 all_chunks = all_chunks.get("chunks")
                 video_description_chunks.extend(all_chunks)
                 for c in all_chunks:
-                    meta_data = f"Keywords: Scene, Video description, Screen 1,Visual,Footage,Image,Shot,Clip,Frame,Sequence, Background of the video is at the Time: {i['time']}"
+                    meta_data = f"File Type: Video; Video Name: {title}. Keywords: Scene, Video description, Screen, Visual, Footage, Image, Shot, Clip, Frame, Sequence, Background of the video is at the Time: {i['time']}"
                     join_chunk_md = meta_data + '\n' + c
                     chunks_for_embedding.append(join_chunk_md)
             logger.info("Creating embeddings for video explanation chunks")
@@ -82,7 +83,7 @@ def handler(event):
                                                                          task='embeddings', embedings=True)
 
             logger.info("Uploading to DB")
-            insert_video(video_description_chunks, embeddings2, kbId, s3_key)
+            insert_video(video_description_chunks, embeddings2, kbId, s3_key,title)
             handler_end = time.time()
             handler_duration = handler_end - handler_start
             execution_time_embeddings = execution_time_embeddings1  + execution_time_embeddings2
@@ -128,14 +129,17 @@ def handler(event):
 
             logger.info("Converting image explanation to chunks")
             all_data = chunks.split_text_into_chunks(content=text)
+            image_chunks = all_data.get("chunks")
+            prefix = f"File Type: Image; Image Name: {title}: "
+            updated_image_chunks = [prefix + item for item in image_chunks]
             logger.info("Creating embeddings for chunks")
-            embeddings, execution_time_embeddings = runpod_api_pipeline(substrings=all_data.get("chunks"), query='',
+            embeddings, execution_time_embeddings = runpod_api_pipeline(substrings=updated_image_chunks, query='',
                                                                         top_k=5,
                                                                         threshold=100,
                                                                         task='embeddings', embedings=True)
 
             logger.info("Uploading to DB")
-            insert_image(all_data.get("chunks"), all_data.get("indices"), embeddings, kbId, s3_key)
+            insert_image(all_data.get("chunks"), all_data.get("indices"), embeddings, kbId, s3_key,title)
             handler_end = time.time()
             handler_duration = handler_end - handler_start
             credits_consumed = cost(handler_duration, execution_time_embeddings)

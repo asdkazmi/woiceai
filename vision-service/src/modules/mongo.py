@@ -23,10 +23,11 @@ db = client['woice-ai-kb']
 collection = db['document-kb']
 
 
-def insert_image(all_chunks, indices, embeddings, kbId, s3_key):
+def insert_image(all_chunks, indices, embeddings, kbId, s3_key,title):
     # Prepare documents for insertion
     image_explanation = [{
         "type": "image",
+        "title": title,
         "s3_Key": s3_key,
         "datetime": datetime.datetime.now(),
         "kbId": kbId,
@@ -38,10 +39,11 @@ def insert_image(all_chunks, indices, embeddings, kbId, s3_key):
     # Insert documents into the collection
     collection.insert_many(image_explanation)
 
-def insert_video(all_chunks,embeddings, kbId, s3_key):
+def insert_video(all_chunks,embeddings, kbId, s3_key,title):
     # Prepare documents for insertion
     video_explanation = [{
         "type": "video",
+        "title": title,
         "s3_Key": s3_key,
         "datetime": datetime.datetime.now(),
         "kbId": kbId,
