@@ -1,9 +1,10 @@
+import logging
+
+import torch
 from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
 )
-import torch
-import logging
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)

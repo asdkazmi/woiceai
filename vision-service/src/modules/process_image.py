@@ -1,14 +1,16 @@
-import os
 import logging
-from .models import processor,model
-from transformers import GenerationConfig
-from PIL import Image
-import requests
+import os
 
+import requests
+from PIL import Image
+from transformers import GenerationConfig
+
+from .models import processor, model
 from .s3download import download_file_from_s3
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
 
 def process_image(url, s3_key):
     if url:
@@ -38,5 +40,5 @@ def process_image(url, s3_key):
     # only get generated tokens; decode them to text
     generated_tokens = output[0, inputs["input_ids"].size(1):]
     generated_text = processor.tokenizer.decode(generated_tokens, skip_special_tokens=True)
-       # print the generated text
+    # print the generated text
     return generated_text

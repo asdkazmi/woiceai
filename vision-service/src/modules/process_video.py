@@ -1,12 +1,13 @@
-from .video_to_image_frames import video_to_image_array
-from .models import processor,model
-from transformers import GenerationConfig
 import requests
+from transformers import GenerationConfig
+
+from .models import processor, model
+from .video_to_image_frames import video_to_image_array
 
 
 def download_video_from_url(url):
     try:
-        filename="video.mp4"
+        filename = "video.mp4"
         response = requests.get(url, stream=True)
         if response.status_code == 200:
             with open(filename, 'wb') as f:
@@ -23,9 +24,9 @@ def process_video(url, delay=1):
     all_video_frames_results = list()
     generated_text = ""
     for i in range(len(video_frames)):
-        input_text = f"Explain the scene {i+1} of a video within 100 words and the summary should not exceed more than 100 words, must remember it."
+        input_text = f"Explain the scene {i + 1} of a video within 100 words and the summary should not exceed more than 100 words, must remember it."
         if len(generated_text):
-            input_text += f"Here is the description of previous scene: \n{generated_text}.\n * Strictly Do not repeat the same description of previous scene in current scene {i+1} and only tell about what happened next in the current scene {i+1} as compared to previous scene. Strictly, explain only what changed in the current scene {i+1} as compared to the previous scene described.*"
+            input_text += f"Here is the description of previous scene: \n{generated_text}.\n * Strictly Do not repeat the same description of previous scene in current scene {i + 1} and only tell about what happened next in the current scene {i + 1} as compared to previous scene. Strictly, explain only what changed in the current scene {i + 1} as compared to the previous scene described.*"
         inputs = processor.process(
             images=[video_frames[i]],
             text=input_text,
