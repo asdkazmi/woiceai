@@ -42,15 +42,29 @@ def insert_image(all_chunks, indices, embeddings, kbId, s3_key, title):
 
 
 def insert_video(all_chunks, embeddings, kbId, s3_key, title):
-    # Prepare documents for insertion
-    video_explanation = [{
-        "type": "video",
-        "title": title,
-        "s3_Key": s3_key,
-        "datetime": datetime.datetime.now(),
-        "kbId": kbId,
-        "metadata": {"chunkNo": i + 1},
-        "content": all_chunks[i],
-        "bgeVectors": embeddings[i]
-    } for i in range(len(all_chunks))]
-    collection.insert_many(video_explanation)
+    try:
+        # Prepare documents for insertion
+        video_explanation = [{
+            "type": "video",
+            "title": title,
+            "s3_Key": s3_key,
+            "datetime": datetime.datetime.now(),
+            "kbId": kbId,
+            "metadata": {"chunkNo": i + 1},
+            "content": all_chunks[i],
+            "bgeVectors": embeddings[i]
+        } for i in range(len(all_chunks))]
+
+        # Insert documents into the collection
+        result = collection.insert_many(video_explanation)
+
+        # Check if the insertion was successful
+        if result.acknowledged:
+            return {"status": "success", "message": "Videos successfully inserted.",
+                    "inserted_ids": result.inserted_ids}
+        else:
+            return {"status": "failure", "message": "Insertion failed without exception."}
+
+    except Exception as e:
+        # Handle any exceptions that occur
+        return {"status": "error", "message": f"An error occurred during insertion: {str(e)}"}
