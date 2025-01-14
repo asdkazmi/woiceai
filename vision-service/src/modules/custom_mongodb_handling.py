@@ -30,6 +30,13 @@ def connect_custom_mongodb(mongodb_srv):
     return custom_collection
 
 
+def check_unique_id(mongodb_srv, unique_id):
+    custom_collection = connect_custom_mongodb(mongodb_srv)
+    existing_document = custom_collection.find_one({"unique_id": unique_id})
+    if existing_document:
+        raise ValueError(f"Document with unique_id '{unique_id}' already exists.")
+
+
 def custom_mongodb_processing(mongodb_srv, content_chunks, kbId, title, unique_id, content_type=None, prefix=None, s3key=None,
                               case=None):
     custom_collection = connect_custom_mongodb(mongodb_srv)
@@ -110,9 +117,6 @@ def insert_content(all_chunks=None, embedding_dict=None, kbId=None, s3_key=None,
                 logger.error(f"Error inserting documents: {e}")
 
     else:
-        existing_document = custom_collection.find_one({"unique_id": unique_id})
-        if existing_document:
-            raise ValueError(f"Document with unique_id '{unique_id}' already exists.")
         documents_custom_db = [{
             "datetime": datetime.datetime.now(),
             "kbId": kbId,

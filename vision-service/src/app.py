@@ -6,10 +6,10 @@ import runpod
 from dotenv import load_dotenv
 
 from modules import chunks
-from modules.credits import cost
-from modules.custom_mongodb_handling import custom_mongodb_processing
+from modules.credits import  cost
+from modules.custom_mongodb_handling import custom_mongodb_processing, check_unique_id
 from modules.embeddings import runpod_api_pipeline
-from modules.mongo import insert_image, insert_video
+from modules.mongo import db, insert_image, insert_video
 from modules.process_image import process_image
 from modules.process_video import download_video_from_url
 from modules.process_video import process_video
@@ -33,8 +33,26 @@ def handler(event):
     kbId = payload['kbId']
     delay = payload.get('delay', 10)
     title = payload.get('title')
-    mongodb_srv = payload.get('mongodb_srv', None)
+    mongodb_srv_id = payload.get('mongodb_srv_id', None)
     unique_id = payload.get('unique_id', None)
+
+    mongodb_srv = None
+    if mongodb_srv_id:
+        keys_collection = db["keys"]
+        document = keys_collection.find_one({'id': mongodb_srv_id})
+        if document:
+            mongodb_srv = document.get("mongodb_srv")
+            logger.info(f"Fetched mongodb_srv: {mongodb_srv}")
+
+            try:
+                # Check if the unique_id exists
+                check_unique_id(mongodb_srv=mongodb_srv, unique_id=unique_id)
+            except ValueError as e:
+                logger.error(str(e))  # Log the error
+                raise  # Re-raise the error to handle it in the calling code
+        else:
+            raise Exception(f"Document with id {mongodb_srv_id} not found.")
+
 
     if content_type == 'video':
         try:
@@ -68,8 +86,8 @@ def handler(event):
                                                                            unique_id=unique_id,
                                                                            content_type=content_type, prefix=prefix
                                                                            )
-                    unique_id_int = int(unique_id) + 1
-                    unique_id = str(unique_id_int)
+                    # unique_id_int = int(unique_id) + 1
+                    unique_id = unique_id + "+1"
                 else:
                     logger.info("Creating embeddings for transcription chunks")
                     embeddings1, execution_time_embeddings1 = runpod_api_pipeline(
