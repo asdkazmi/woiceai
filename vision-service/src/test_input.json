@@ -3,6 +3,8 @@
         "s3_key":"uploads/image (1).png",
         "content_type": "image",
         "kbId": "43",
-        "title": "image.png"
+        "title": "image.png",
+        "mongodb_srv": "mongodb://localhost:27017/example",
+        "unique_id": "6"
     }
 }

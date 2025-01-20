@@ -4,7 +4,7 @@
         "content_type": "video",
         "kbId": "42",
         "title": "test1",
-        "mongodb_srv_id": 12,
+        "mongodb_srv": "mongodb://localhost:27017/example",
         "unique_id": "5"
     }
 }

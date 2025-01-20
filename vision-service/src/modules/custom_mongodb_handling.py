@@ -49,7 +49,8 @@ def custom_mongodb_processing(mongodb_srv, content_chunks, kbId, title, unique_i
             description_chunks = all_chunks.get("chunks")
             video_description_chunks.extend(description_chunks)
 
-        insert_content(all_chunks=video_description_chunks, kbId=kbId, custom_collection=custom_collection, unique_id=unique_id)
+        insert_content(all_chunks=video_description_chunks, kbId=kbId, custom_collection=custom_collection, unique_id=unique_id,
+                       s3_key=s3key)
 
         content_chunks = []
         for doc in custom_collection.find({"unique_id": unique_id}, {"content": 1}):
@@ -63,7 +64,8 @@ def custom_mongodb_processing(mongodb_srv, content_chunks, kbId, title, unique_i
 
                 content_dict[doc['_id']] = combined_chunk
     else:
-        insert_content(all_chunks=content_chunks, kbId=kbId, custom_collection=custom_collection, unique_id=unique_id)
+        insert_content(all_chunks=content_chunks, kbId=kbId, custom_collection=custom_collection, unique_id=unique_id,
+                       s3_key=s3key)
         for doc in custom_collection.find({"unique_id": unique_id}, {"content": 1}):
             if 'content' in doc:
                 content_dict[doc['_id']] = prefix + doc['content']
@@ -119,6 +121,7 @@ def insert_content(all_chunks=None, embedding_dict=None, kbId=None, s3_key=None,
     else:
         documents_custom_db = [{
             "datetime": datetime.datetime.now(),
+            "s3_Key": s3_key,
             "kbId": kbId,
             "unique_id": unique_id,
             "content": all_chunks[i]
