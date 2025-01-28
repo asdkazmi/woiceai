@@ -35,6 +35,14 @@ def handler(event):
     title = payload.get('title')
     mongodb_srv = payload.get('mongodb_srv', None)
     unique_id = payload.get('unique_id', None)
+    customdb_name = payload.get('customdb_name', None)
+
+    try:
+        # Check if the unique_id exists
+        check_unique_id(mongodb_srv=mongodb_srv, unique_id=unique_id, customdb_name=customdb_name)
+    except ValueError as e:
+        logger.error(str(e))  # Log the error
+        raise  # Re-raise the error to handle it in the calling code
 
     if content_type == 'video':
         try:
@@ -66,6 +74,7 @@ def handler(event):
                                                                            mongodb_srv=mongodb_srv, kbId=kbId,
                                                                            s3key=s3_key, title=title,
                                                                            unique_id=unique_id,
+                                                                           customdb_name=customdb_name,
                                                                            content_type=content_type, prefix=prefix
                                                                            )
                     # unique_id_int = int(unique_id) + 1
@@ -103,7 +112,8 @@ def handler(event):
                                                                        mongodb_srv=mongodb_srv, title=title,
                                                                        s3key=s3_key, kbId=kbId, unique_id=unique_id,
                                                                        content_type=content_type,
-                                                                       case="video_description")
+                                                                       case="video_description",
+                                                                       customdb_name=customdb_name)
                 handler_end = time.time()
                 handler_duration = handler_end - handler_start
                 credits_consumed = cost(handler_duration, (execution_time_embeddings1 + execution_time_embeddings2))
@@ -173,7 +183,7 @@ def handler(event):
                                                                       mongodb_srv=mongodb_srv,
                                                                       prefix=prefix, s3key=s3_key, kbId=kbId,
                                                                       content_type=content_type, title=title,
-                                                                      unique_id=unique_id
+                                                                      unique_id=unique_id, customdb_name=customdb_name
                                                                       )
                 handler_end = time.time()
                 handler_duration = handler_end - handler_start

@@ -14,7 +14,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-def connect_custom_mongodb(mongodb_srv):
+def connect_custom_mongodb(mongodb_srv, customdb_name):
     uri = mongodb_srv
     custom_client = MongoClient(uri)
 
@@ -24,22 +24,23 @@ def connect_custom_mongodb(mongodb_srv):
         logger.info("Pinged your deployment. You successfully connected to MongoDB!")
     except Exception as e:
         logger.info(e)
-    custom_db = custom_client['woice-ai-kb']
+    custom_db = custom_client[customdb_name]
     custom_collection = custom_db['document-kb']
 
     return custom_collection
 
 
-def check_unique_id(mongodb_srv, unique_id):
-    custom_collection = connect_custom_mongodb(mongodb_srv)
+def check_unique_id(mongodb_srv, unique_id, customdb_name):
+    custom_collection = connect_custom_mongodb(mongodb_srv=mongodb_srv, customdb_name=customdb_name)
     existing_document = custom_collection.find_one({"unique_id": unique_id})
     if existing_document:
         raise ValueError(f"Document with unique_id '{unique_id}' already exists.")
 
 
-def custom_mongodb_processing(mongodb_srv, content_chunks, kbId, title, unique_id, content_type=None, prefix=None, s3key=None,
+def custom_mongodb_processing(mongodb_srv, content_chunks, kbId, title, unique_id, customdb_name, content_type=None,
+                              prefix=None, s3key=None,
                               case=None):
-    custom_collection = connect_custom_mongodb(mongodb_srv)
+    custom_collection = connect_custom_mongodb(mongodb_srv=mongodb_srv, customdb_name=customdb_name)
     content_dict = {}
 
     if case == "video_description":
@@ -49,7 +50,8 @@ def custom_mongodb_processing(mongodb_srv, content_chunks, kbId, title, unique_i
             description_chunks = all_chunks.get("chunks")
             video_description_chunks.extend(description_chunks)
 
-        insert_content(all_chunks=video_description_chunks, kbId=kbId, custom_collection=custom_collection, unique_id=unique_id,
+        insert_content(all_chunks=video_description_chunks, kbId=kbId, custom_collection=custom_collection,
+                       unique_id=unique_id,
                        s3_key=s3key)
 
         content_chunks = []

@@ -1,10 +1,11 @@
 {
     "input": {
-        "s3_key":"uploads/image (1).png",
-        "content_type": "image",
-        "kbId": "43",
-        "title": "image.png",
+        "s3_key":"knowledge-bases/nEMXLfpuCmy2tHpPwVq9fluj0lySHYjFUU0P0Mod.mp4",
+        "content_type": "video",
+        "kbId": "903",
+        "title": "test1",
         "mongodb_srv": "mongodb://localhost:27017/example",
-        "unique_id": "6"
+        "unique_id": "903",
+        "customdb_name": "woice-explain-vid"
     }
 }
