@@ -1,6 +1,7 @@
 import cv2
 from PIL import Image
 
+
 def video_to_image_array(video_path, delay):
     # Create a list to store the images
     image_array = []
