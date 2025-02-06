@@ -37,12 +37,6 @@ def handler(event):
     unique_id = payload.get('unique_id', None)
     customdb_name = payload.get('customdb_name', None)
 
-    try:
-        # Check if the unique_id exists
-        check_unique_id(mongodb_srv=mongodb_srv, unique_id=unique_id, customdb_name=customdb_name)
-    except ValueError as e:
-        logger.error(str(e))  # Log the error
-        raise  # Re-raise the error to handle it in the calling code
 
     if content_type == 'video':
         try:
