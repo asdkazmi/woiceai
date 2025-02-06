@@ -37,12 +37,6 @@ def handler(event):
     unique_id = payload.get('unique_id', None)
     customdb_name = payload.get('customdb_name', None)
 
-    try:
-        # Check if the unique_id exists
-        check_unique_id(mongodb_srv=mongodb_srv, unique_id=unique_id, customdb_name=customdb_name)
-    except ValueError as e:
-        logger.error(str(e))  # Log the error
-        raise  # Re-raise the error to handle it in the calling code
 
     if content_type == 'video':
         try:
@@ -106,7 +100,7 @@ def handler(event):
                                  f"the Time: {i['time']}")
                     join_chunk_md = meta_data + '\n' + c
                     chunks_for_embedding.append(join_chunk_md)
-
+            scene_explanation = "\n".join([f"Time: {item['time']} seconds\nScene: {item['text']}\n" for item in processed_screens])
             if mongodb_srv:
                 execution_time_embeddings2 = custom_mongodb_processing(content_chunks=processed_screens,
                                                                        mongodb_srv=mongodb_srv, title=title,
@@ -123,7 +117,9 @@ def handler(event):
                                               "StringValue": s3_key if s3_key else url},
                     "KNOWLEDGEBASE.CONTENT_TYPE": {"DataType": "String", "StringValue": content_type},
                     "KNOWLEDGEBASE.STATUS": {"DataType": "String", "StringValue": "Completed"},
-                    "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)}
+                    "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)},
+                    "KNOWLEDGEBASE.SCENE_EXPLANATION": {"DataType": "String", "StringValue": scene_explanation},
+                    "KNOWLEDGEBASE.TRANSCRIPTION": {"DataType": "String", "StringValue": transcription if transcription else "No transcription available"}
                 }
 
                 sending_message_attributes_to_sns(message_attributes)
@@ -148,7 +144,9 @@ def handler(event):
                                           "StringValue": s3_key if s3_key else url},
                 "KNOWLEDGEBASE.CONTENT_TYPE": {"DataType": "String", "StringValue": content_type},
                 "KNOWLEDGEBASE.STATUS": {"DataType": "String", "StringValue": "Completed"},
-                "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)}
+                "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)},
+                "KNOWLEDGEBASE.SCENE_EXPLANATION": {"DataType": "String", "StringValue": scene_explanation},
+                "KNOWLEDGEBASE.TRANSCRIPTION": {"DataType": "String", "StringValue": transcription if transcription else "No transcription available"}
             }
             sending_message_attributes_to_sns(message_attributes)
             return message_attributes
@@ -194,7 +192,8 @@ def handler(event):
                                               "StringValue": s3_key if s3_key else url},
                     "KNOWLEDGEBASE.CONTENT_TYPE": {"DataType": "String", "StringValue": content_type},
                     "KNOWLEDGEBASE.STATUS": {"DataType": "String", "StringValue": "Completed"},
-                    "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)}
+                    "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)},
+                    "KNOWLEDGEBASE.EXPLANATION": {"DataType": "String", "StringValue": text}
                 }
 
                 sending_message_attributes_to_sns(message_attributes)
@@ -217,7 +216,8 @@ def handler(event):
                                           "StringValue": s3_key if s3_key else url},
                 "KNOWLEDGEBASE.CONTENT_TYPE": {"DataType": "String", "StringValue": content_type},
                 "KNOWLEDGEBASE.STATUS": {"DataType": "String", "StringValue": "Completed"},
-                "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)}
+                "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)},
+                "KNOWLEDGEBASE.EXPLANATION": {"DataType": "String", "StringValue": text}
             }
             sending_message_attributes_to_sns(message_attributes)
             return message_attributes
