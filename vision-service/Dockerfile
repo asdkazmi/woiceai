@@ -52,5 +52,6 @@ ENV HUGGINGFACE_HUB_CACHE="/runpod-volume/hub"
 ENV TRANSFORMERS_CACHE="/runpod-volume/hub"
 
 COPY src/ .
+COPY .env .
 
 CMD [ "python3", "-u", "/app.py" ]

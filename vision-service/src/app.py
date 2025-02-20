@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from modules import chunks
 from modules.credits import cost
-from modules.custom_mongodb_handling import custom_mongodb_processing, check_unique_id
+# from modules.custom_mongodb_handling import custom_mongodb_processing, check_unique_id
 from modules.embeddings import runpod_api_pipeline
 from modules.mongo import db, insert_image, insert_video
 from modules.process_image import process_image
@@ -33,10 +33,9 @@ def handler(event):
     kbId = payload['kbId']
     delay = payload.get('delay', 10)
     title = payload.get('title')
-    mongodb_srv = payload.get('mongodb_srv', None)
-    unique_id = payload.get('unique_id', None)
-    customdb_name = payload.get('customdb_name', None)
-
+    # mongodb_srv = payload.get('mongodb_srv', None)
+    # unique_id = payload.get('unique_id', None)
+    # customdb_name = payload.get('customdb_name', None)
 
     if content_type == 'video':
         try:
@@ -63,26 +62,26 @@ def handler(event):
                           f"Said in this video,Spoken content,Conversation,Speech,Dialogue,audio content is: ")
                 updated_transcription_chunks = [prefix + item for item in transcription_chunks]
 
-                if mongodb_srv:
-                    execution_time_embeddings1 = custom_mongodb_processing(content_chunks=transcription_chunks,
-                                                                           mongodb_srv=mongodb_srv, kbId=kbId,
-                                                                           s3key=s3_key, title=title,
-                                                                           unique_id=unique_id,
-                                                                           customdb_name=customdb_name,
-                                                                           content_type=content_type, prefix=prefix
-                                                                           )
-                    # unique_id_int = int(unique_id) + 1
-                    unique_id = unique_id + "+1"
-                else:
-                    logger.info("Creating embeddings for transcription chunks")
-                    embeddings1, execution_time_embeddings1 = runpod_api_pipeline(
-                        substrings=updated_transcription_chunks,
-                        query='',
-                        top_k=5,
-                        threshold=100,
-                        task='embeddings', embedings=True)
-                    logger.info("Uploading to DB")
-                    insert_video(transcription_chunks, embeddings1, kbId, s3_key, title)
+                # if mongodb_srv:
+                #     execution_time_embeddings1 = custom_mongodb_processing(content_chunks=transcription_chunks,
+                #                                                            mongodb_srv=mongodb_srv, kbId=kbId,
+                #                                                            s3key=s3_key, title=title,
+                #                                                            unique_id=unique_id,
+                #                                                            customdb_name=customdb_name,
+                #                                                            content_type=content_type, prefix=prefix
+                #                                                            )
+                #     # unique_id_int = int(unique_id) + 1
+                #     unique_id = unique_id + "+1"
+                # else:
+                logger.info("Creating embeddings for transcription chunks")
+                embeddings1, execution_time_embeddings1 = runpod_api_pipeline(
+                    substrings=updated_transcription_chunks,
+                    query='',
+                    top_k=5,
+                    threshold=100,
+                    task='embeddings', embedings=True)
+                logger.info("Uploading to DB")
+                insert_video(transcription_chunks, embeddings1, kbId, s3_key, title)
             else:
                 execution_time_embeddings1 = 0
                 logger.info("Video has no transcription")
@@ -101,29 +100,29 @@ def handler(event):
                     join_chunk_md = meta_data + '\n' + c
                     chunks_for_embedding.append(join_chunk_md)
             scene_explanation = "\n".join([f"Time: {item['time']} seconds\nScene: {item['text']}\n" for item in processed_screens])
-            if mongodb_srv:
-                execution_time_embeddings2 = custom_mongodb_processing(content_chunks=processed_screens,
-                                                                       mongodb_srv=mongodb_srv, title=title,
-                                                                       s3key=s3_key, kbId=kbId, unique_id=unique_id,
-                                                                       content_type=content_type,
-                                                                       case="video_description",
-                                                                       customdb_name=customdb_name)
-                handler_end = time.time()
-                handler_duration = handler_end - handler_start
-                credits_consumed = cost(handler_duration, (execution_time_embeddings1 + execution_time_embeddings2))
-                message_attributes = {
-                    "KNOWLEDGEBASE.ID": {"DataType": "String", "StringValue": kbId},
-                    "KNOWLEDGEBASE.CONTENT": {"DataType": "String",
-                                              "StringValue": s3_key if s3_key else url},
-                    "KNOWLEDGEBASE.CONTENT_TYPE": {"DataType": "String", "StringValue": content_type},
-                    "KNOWLEDGEBASE.STATUS": {"DataType": "String", "StringValue": "Completed"},
-                    "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)},
-                    "KNOWLEDGEBASE.SCENE_EXPLANATION": {"DataType": "String", "StringValue": scene_explanation},
-                    "KNOWLEDGEBASE.TRANSCRIPTION": {"DataType": "String", "StringValue": transcription if transcription else "No transcription available"}
-                }
-
-                sending_message_attributes_to_sns(message_attributes)
-                return message_attributes
+            # if mongodb_srv:
+            #     execution_time_embeddings2 = custom_mongodb_processing(content_chunks=processed_screens,
+            #                                                            mongodb_srv=mongodb_srv, title=title,
+            #                                                            s3key=s3_key, kbId=kbId, unique_id=unique_id,
+            #                                                            content_type=content_type,
+            #                                                            case="video_description",
+            #                                                            customdb_name=customdb_name)
+            #     handler_end = time.time()
+            #     handler_duration = handler_end - handler_start
+            #     credits_consumed = cost(handler_duration, (execution_time_embeddings1 + execution_time_embeddings2))
+            #     message_attributes = {
+            #         "KNOWLEDGEBASE.ID": {"DataType": "String", "StringValue": kbId},
+            #         "KNOWLEDGEBASE.CONTENT": {"DataType": "String",
+            #                                   "StringValue": s3_key if s3_key else url},
+            #         "KNOWLEDGEBASE.CONTENT_TYPE": {"DataType": "String", "StringValue": content_type},
+            #         "KNOWLEDGEBASE.STATUS": {"DataType": "String", "StringValue": "Completed"},
+            #         "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)},
+            #         "KNOWLEDGEBASE.SCENE_EXPLANATION": {"DataType": "String", "StringValue": scene_explanation},
+            #         "KNOWLEDGEBASE.TRANSCRIPTION": {"DataType": "String", "StringValue": transcription if transcription else "No transcription available"}
+            #     }
+            #
+            #     sending_message_attributes_to_sns(message_attributes)
+            #     return message_attributes
 
             logger.info("Creating embeddings for video explanation chunks")
             embeddings2, execution_time_embeddings2 = runpod_api_pipeline(substrings=chunks_for_embedding, query='',
@@ -176,28 +175,28 @@ def handler(event):
             prefix = f"File Type: Image; Image Name: {title}: "
             updated_image_chunks = [prefix + item for item in image_chunks]
 
-            if mongodb_srv:
-                execution_time_embeddings = custom_mongodb_processing(content_chunks=image_chunks,
-                                                                      mongodb_srv=mongodb_srv,
-                                                                      prefix=prefix, s3key=s3_key, kbId=kbId,
-                                                                      content_type=content_type, title=title,
-                                                                      unique_id=unique_id, customdb_name=customdb_name
-                                                                      )
-                handler_end = time.time()
-                handler_duration = handler_end - handler_start
-                credits_consumed = cost(handler_duration, execution_time_embeddings)
-                message_attributes = {
-                    "KNOWLEDGEBASE.ID": {"DataType": "String", "StringValue": kbId},
-                    "KNOWLEDGEBASE.CONTENT": {"DataType": "String",
-                                              "StringValue": s3_key if s3_key else url},
-                    "KNOWLEDGEBASE.CONTENT_TYPE": {"DataType": "String", "StringValue": content_type},
-                    "KNOWLEDGEBASE.STATUS": {"DataType": "String", "StringValue": "Completed"},
-                    "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)},
-                    "KNOWLEDGEBASE.EXPLANATION": {"DataType": "String", "StringValue": text}
-                }
-
-                sending_message_attributes_to_sns(message_attributes)
-                return message_attributes
+            # if mongodb_srv:
+            #     execution_time_embeddings = custom_mongodb_processing(content_chunks=image_chunks,
+            #                                                           mongodb_srv=mongodb_srv,
+            #                                                           prefix=prefix, s3key=s3_key, kbId=kbId,
+            #                                                           content_type=content_type, title=title,
+            #                                                           unique_id=unique_id, customdb_name=customdb_name
+            #                                                           )
+            #     handler_end = time.time()
+            #     handler_duration = handler_end - handler_start
+            #     credits_consumed = cost(handler_duration, execution_time_embeddings)
+            #     message_attributes = {
+            #         "KNOWLEDGEBASE.ID": {"DataType": "String", "StringValue": kbId},
+            #         "KNOWLEDGEBASE.CONTENT": {"DataType": "String",
+            #                                   "StringValue": s3_key if s3_key else url},
+            #         "KNOWLEDGEBASE.CONTENT_TYPE": {"DataType": "String", "StringValue": content_type},
+            #         "KNOWLEDGEBASE.STATUS": {"DataType": "String", "StringValue": "Completed"},
+            #         "KNOWLEDGEBASE.CREDITS_CONSUMED": {"DataType": "String", "StringValue": str(credits_consumed)},
+            #         "KNOWLEDGEBASE.EXPLANATION": {"DataType": "String", "StringValue": text}
+            #     }
+            #
+            #     sending_message_attributes_to_sns(message_attributes)
+            #     return message_attributes
 
             logger.info("Creating embeddings for chunks")
             embeddings, execution_time_embeddings = runpod_api_pipeline(substrings=updated_image_chunks, query='',
