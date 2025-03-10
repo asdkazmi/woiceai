@@ -1,11 +1,14 @@
 torch == 2.4.1
-torchvision
-einops == 0.8.0
-tensorflow-cpu == 2.17.0
-transformers == 4.45.1
-accelerate == 0.34.2
-bitsandbytes  == 0.44.1
-opencv-python == 4.10.0.84
-runpod == 1.6.2
+transformers
+accelerate
+runpod
 ffmpeg-python == 0.2.0
+qwen-vl-utils[decord]==0.0.10
+gradio==5.4.0
+gradio_client==1.4.2
+transformers-stream-generator==0.0.4
+flash-attn==2.6.1
+opencv-python
+torchvision
 pymongo
+av==14.2.0
