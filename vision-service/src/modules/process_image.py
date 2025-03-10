@@ -75,4 +75,4 @@ def process_image(url, s3_key):
         generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
     )
     os.remove(image_path)
-    return generated_text
+    return generated_text[0]
