@@ -1,14 +1,14 @@
 torch == 2.4.1
-transformers
-accelerate
-runpod
+transformers == 4.49.0
+accelerate == 1.4.0
+runpod == 1.3.0
 ffmpeg-python == 0.2.0
-qwen-vl-utils[decord]==0.0.10
-gradio==5.4.0
-gradio_client==1.4.2
-transformers-stream-generator==0.0.4
-flash-attn==2.6.1
-opencv-python
-torchvision
-pymongo
-av==14.2.0
+qwen-vl-utils[decord] == 0.0.10
+gradio == 5.4.0
+gradio_client == 1.4.2
+transformers-stream-generator == 0.0.4
+flash-attn == 2.6.1
+opencv-python == 4.11.0.86
+torchvision == 0.19.1
+pymongo == 4.11.2
+av == 14.2.0
