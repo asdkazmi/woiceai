@@ -1,4 +1,5 @@
 import requests
+import shutil
 from qwen_vl_utils import process_vision_info
 from .models import processor, model
 from .video_to_image_frames import video_to_image_paths
@@ -70,4 +71,5 @@ def process_video(url, delay=1):
     for i, result in enumerate(all_video_frames_results):
         all_video_frames_results[i] = {'time': i * delay, 'text': result}
 
+    shutil.rmtree("/tmp/frames")
     return all_video_frames_results

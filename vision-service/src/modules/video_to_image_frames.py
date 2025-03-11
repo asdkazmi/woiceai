@@ -6,7 +6,7 @@ from PIL import Image
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-def video_to_image_paths(video_path, delay, output_dir="frames"):
+def video_to_image_paths(video_path, delay, output_dir="/tmp/frames"):
     # Ensure the output directory exists
     os.makedirs(output_dir, exist_ok=True)
 
