@@ -46,6 +46,8 @@ RUN wget https://huggingface.co/$QWEN_DIR/resolve/main/model-00003-of-00005.safe
 RUN wget https://huggingface.co/$QWEN_DIR/resolve/main/model-00004-of-00005.safetensors?download=true -O $QWEN_DIR/model-00004-of-00005.safetensors
 RUN wget https://huggingface.co/$QWEN_DIR/resolve/main/model-00005-of-00005.safetensors?download=true -O $QWEN_DIR/model-00005-of-00005.safetensors
 
+RUN pip install packaging==24.2
+RUN pip install torch==2.4.1
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
