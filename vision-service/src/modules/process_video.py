@@ -24,13 +24,13 @@ def process_video(url, delay=1):
     all_video_frames_results = list()
     generated_text = ""
     for i in range(len(video_frames_paths)):
-        input_text = f"Explain the scene {i + 1} of a video within 100 words and the summary should not exceed more than 100 words, must remember it."
+        input_text = f"Explain the scene {i + 1} of a video within 300 words and the explanation should not exceed more than 100 words, must remember it."
         if len(generated_text):
             input_text += f"Here is the description of previous scene: \n{generated_text}.\n\n\n * Strictly Do not repeat the same description of previous scene in current scene {i + 1} and only tell about what happened next in the current scene {i + 1} as compared to previous scene. Strictly, explain only what changed in the current scene {i + 1} as compared to the previous scene described.*"
         messages = [
             {
                 "role": "system",
-                "content": f"You are an advanced vision AI model specializing in detailed image and video analysis. The frames of video are captured after every {delay} seconds. You have been given with a frame of a video and explanation of its previous frame, You have to explain current frame as transition of video from previous frame description. You strictly do not have to repeat same previous scene description in current scene. You have to give explanation of frame as you are giving explanation of video"
+                "content": f"You are an advanced vision AI model specializing in detailed image and video analysis. You have been given with a frame of a video and explanation of its previous frame. The frames of video are captured after every {delay} seconds. You have to explain current frame as transition of video from previous frame description. You strictly do not have to repeat same previous scene description in current scene. You have to give explanation of frame as you are giving explanation of video. Just explain what changes in the current scene. If nothing changes in current scene compared to previous scene the respond as everything remain same in this scene."
             },
             {
                 "role": "user",
