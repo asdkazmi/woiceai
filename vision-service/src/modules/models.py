@@ -1,19 +1,17 @@
 import logging
-
 import torch
-from transformers import (
-    AutoModelForCausalLM,
-    AutoProcessor,
-)
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer, AutoProcessor
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-repo_name = "cyan2k/molmo-7B-D-bnb-4bit"
-arguments = {"device_map": "auto", "torch_dtype": "auto", "trust_remote_code": True}
-
-processor = AutoProcessor.from_pretrained(repo_name, **arguments)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-logging.info(f'Loading model {repo_name}... on {device}')
-model = AutoModelForCausalLM.from_pretrained(repo_name, **arguments)
+logging.info(f'Loading model Qwen/Qwen2.5-VL-7B-Instruct ... on {device}')
+model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen2.5-VL-7B-Instruct",
+    torch_dtype=torch.bfloat16,
+    attn_implementation="flash_attention_2",
+    device_map=device
+)
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", use_fast=True)

@@ -1,7 +1,7 @@
 {
     "input": {
-        "s3_key":"knowledge-bases/nEMXLfpuCmy2tHpPwVq9fluj0lySHYjFUU0P0Mod.mp4",
-        "content_type": "video",
+        "s3_key":"knowledge-bases/BVESqavjBm9BqeAE6CKT39eHJHhl42DUa2wqzObN.png",
+        "content_type": "image",
         "kbId": "903",
         "title": "test1",
         "mongodb_srv": "mongodb://localhost:27017/example",

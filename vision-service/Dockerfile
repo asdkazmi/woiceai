@@ -38,11 +38,16 @@ ARG WISPER_DIR="distil-whisper/distil-large-v3"
 RUN GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/$WISPER_DIR $WISPER_DIR
 RUN wget https://huggingface.co/$WISPER_DIR/resolve/main/model.safetensors?download=true -O $WISPER_DIR/model.safetensors
 
-ARG MOLMO_DIR="cyan2k/molmo-7B-D-bnb-4bit"
-RUN GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/$MOLMO_DIR $MOLMO_DIR
-RUN wget https://huggingface.co/$MOLMO_DIR/resolve/main/model-00001-of-00002.safetensors?download=true -O $MOLMO_DIR/model-00001-of-00002.safetensors
-RUN wget https://huggingface.co/$MOLMO_DIR/resolve/main/model-00002-of-00002.safetensors?download=true -O $MOLMO_DIR/model-00002-of-00002.safetensors
+ARG QWEN_DIR="Qwen/Qwen2.5-VL-7B-Instruct"
+RUN GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/$QWEN_DIR $QWEN_DIR
+RUN wget https://huggingface.co/$QWEN_DIR/resolve/main/model-00001-of-00005.safetensors?download=true -O $QWEN_DIR/model-00001-of-00005.safetensors
+RUN wget https://huggingface.co/$QWEN_DIR/resolve/main/model-00002-of-00005.safetensors?download=true -O $QWEN_DIR/model-00002-of-00005.safetensors
+RUN wget https://huggingface.co/$QWEN_DIR/resolve/main/model-00003-of-00005.safetensors?download=true -O $QWEN_DIR/model-00003-of-00005.safetensors
+RUN wget https://huggingface.co/$QWEN_DIR/resolve/main/model-00004-of-00005.safetensors?download=true -O $QWEN_DIR/model-00004-of-00005.safetensors
+RUN wget https://huggingface.co/$QWEN_DIR/resolve/main/model-00005-of-00005.safetensors?download=true -O $QWEN_DIR/model-00005-of-00005.safetensors
 
+RUN pip install packaging==24.2
+RUN pip install torch==2.4.1
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
