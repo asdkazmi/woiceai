@@ -367,7 +367,7 @@ const ChatAIPage: React.FC = () => {
 
   const handleBack = () => {
     if (kbId) {
-      navigate(`/knowledge-bases/${kbId}`);
+      navigate(`/knowledge-bases/${kbId}?tab=chat-ais`);
     } else {
       navigate('/knowledge-bases');
     }

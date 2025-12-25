@@ -5,13 +5,14 @@ export interface KnowledgeBaseContent {
   knowledgeBaseId: number;
   content: string;
   textContent?: string | null;
-  type: 'file' | 'url' | 'text' | 'audio' | 'video' | 'image';
-  status: 'pending' | 'queued' | 'processing' | 'completed' | 'failed';
+  type: 'file' | 'url' | 'text' | 'audio' | 'video' | 'image' | 'restricted_query';
+  status: 'pending' | 'queued' | 'processing' | 'completed' | 'failed' | 'non-indexing';
   depth?: number | null;
   filename?: string | null;
   transcription?: string | null;
   explanation?: string | null;
   sceneExplanation?: string | null;
+  scrappingStatus?: string | null;
   childPages?: any[] | null;
   documentUrl?: string | null;
   createdAt?: string;
@@ -25,6 +26,7 @@ export interface KnowledgeBaseContentStats {
   queued: number;
   processing: number;
   failed: number;
+  nonIndexing?: number;
 }
 
 export interface KnowledgeBase {
@@ -32,7 +34,7 @@ export interface KnowledgeBase {
   userId: number;
   name: string;
   knowledgeBaseApiId?: string | null;
-  status: 'pending' | 'queued' | 'processing' | 'indexed' | 'failed';
+  status: 'pending' | 'queued' | 'processing' | 'indexed' | 'failed' | 'deleting';
   createdAt?: string;
   updatedAt?: string;
   knowledgeBaseContents?: KnowledgeBaseContent[];
@@ -47,6 +49,7 @@ export interface CreateKnowledgeBaseData {
   audios?: File[];
   videos?: File[];
   images?: File[];
+  restrictedQueries?: string[];
   depth?: number;
 }
 
@@ -58,7 +61,8 @@ export interface UpdateKnowledgeBaseData {
   audios?: File[];
   videos?: File[];
   images?: File[];
-  deleteIds?: number[];
+  restrictedQueries?: string[];
+  deleteIds?: (number | string)[];
 }
 
 export interface PaginationMeta {
@@ -156,6 +160,11 @@ export const knowledgeBaseService = {
       });
     }
 
+    // Append restricted queries
+    if (data.restrictedQueries && data.restrictedQueries.length > 0) {
+      formData.append('restrictedQueries', JSON.stringify(data.restrictedQueries));
+    }
+
     // Append depth if provided
     if (data.depth) {
       formData.append('depth', data.depth.toString());
@@ -214,6 +223,11 @@ export const knowledgeBaseService = {
       });
     }
 
+    // Append restricted queries
+    if (data.restrictedQueries && data.restrictedQueries.length > 0) {
+      formData.append('restrictedQueries', JSON.stringify(data.restrictedQueries));
+    }
+
     // Append delete IDs
     if (data.deleteIds && data.deleteIds.length > 0) {
       formData.append('deleteIds', JSON.stringify(data.deleteIds));
@@ -242,6 +256,16 @@ export const knowledgeBaseService = {
         };
       };
     }>(`/knowledge-base/content/${contentId}`);
+    return response.data.data.content;
+  },
+
+  async retryContent(contentId: number): Promise<KnowledgeBaseContent> {
+    const response = await api.post<{
+      message: string;
+      data: {
+        content: KnowledgeBaseContent;
+      };
+    }>(`/knowledge-base/content/${contentId}/retry`);
     return response.data.data.content;
   },
 };

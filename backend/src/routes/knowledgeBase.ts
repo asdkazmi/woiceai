@@ -103,6 +103,46 @@ router.get('/content/:contentId', authenticate, async (req: Request, res: Respon
   }
 });
 
+// @route   POST /api/knowledge-base/content/:contentId/retry
+// @desc    Retry indexing a failed content item
+// @access  Private
+router.post('/content/:contentId/retry', authenticate, async (req: Request, res: Response) => {
+  try {
+    const user = (req as AuthRequest).user!;
+    const contentId = parseInt(req.params.contentId);
+
+    if (isNaN(contentId)) {
+      return res.status(400).json({
+        message: 'Invalid content ID',
+      });
+    }
+
+    const content = await KnowledgeBaseService.retryContent(contentId, user.id!);
+
+    if (!content) {
+      return res.status(404).json({
+        message: 'Content not found or access denied',
+      });
+    }
+
+    res.json({
+      message: 'Content retry initiated successfully',
+      data: {
+        content,
+      },
+    });
+  } catch (error: any) {
+    console.error('Retry content error:', error);
+    const statusCode = error.message.includes('not in failed status') || error.message.includes('Cannot retry') 
+      ? 400 
+      : 500;
+    res.status(statusCode).json({
+      message: error.message || 'Server error',
+      ...(process.env.NODE_ENV === 'development' && { error: error.message }),
+    });
+  }
+});
+
 // @route   GET /api/knowledge-base/:id
 // @desc    Get a single knowledge base by ID
 // @access  Private
@@ -171,6 +211,7 @@ router.post(
       // Parse JSON fields from request body
       let urls: any[] = [];
       let texts: any[] = [];
+      let restrictedQueries: string[] = [];
 
       if (req.body.urls) {
         try {
@@ -188,6 +229,22 @@ router.post(
         }
       }
 
+      if (req.body.restrictedQueries) {
+        try {
+          restrictedQueries = typeof req.body.restrictedQueries === 'string' 
+            ? JSON.parse(req.body.restrictedQueries) 
+            : req.body.restrictedQueries;
+          // Ensure it's an array and filter out empty strings
+          if (Array.isArray(restrictedQueries)) {
+            restrictedQueries = restrictedQueries.filter((q: any) => typeof q === 'string' && q.trim().length > 0);
+          } else {
+            restrictedQueries = [];
+          }
+        } catch (e) {
+          restrictedQueries = [];
+        }
+      }
+
       const knowledgeBase = await KnowledgeBaseService.create(user.id!, {
         name: req.body.name,
         files: files.files || [],
@@ -196,6 +253,7 @@ router.post(
         audios: files.audios || [],
         videos: files.videos || [],
         images: files.images || [],
+        restrictedQueries,
         depth: req.body.depth ? parseInt(req.body.depth) : undefined,
       });
 
@@ -252,7 +310,8 @@ router.patch(
       // Parse JSON fields from request body
       let urls: any[] = [];
       let texts: any[] = [];
-      let deleteIds: number[] = [];
+      let restrictedQueries: string[] = [];
+      let deleteIds: (number | string)[] = [];
 
       if (req.body.urls) {
         try {
@@ -297,19 +356,47 @@ router.patch(
         }
       }
 
+      if (req.body.restrictedQueries) {
+        try {
+          restrictedQueries = typeof req.body.restrictedQueries === 'string' 
+            ? JSON.parse(req.body.restrictedQueries) 
+            : req.body.restrictedQueries;
+          // Ensure it's an array and filter out empty strings
+          if (Array.isArray(restrictedQueries)) {
+            restrictedQueries = restrictedQueries
+              .filter((q: any) => typeof q === 'string' && q.trim().length > 0)
+              .map((q: string) => q.trim());
+          } else {
+            restrictedQueries = [];
+          }
+        } catch (e) {
+          return res.status(422).json({
+            message: 'Validation failed',
+            errors: [{ type: 'field', value: req.body.restrictedQueries, msg: 'Invalid restrictedQueries format', path: 'restrictedQueries', location: 'body' }],
+          });
+        }
+      }
+
       if (req.body.deleteIds) {
         try {
           if (typeof req.body.deleteIds === 'string') {
             // Parse JSON string
             const parsed = JSON.parse(req.body.deleteIds);
             if (Array.isArray(parsed)) {
-              deleteIds = parsed.map((id: any) => parseInt(String(id), 10)).filter((id: number) => !isNaN(id));
+              // Support both numbers (MySQL IDs) and strings (restricted query content)
+              deleteIds = parsed.map((id: any) => {
+                const numId = parseInt(String(id), 10);
+                return isNaN(numId) ? String(id) : numId;
+              });
             } else {
               throw new Error('deleteIds must be an array');
             }
           } else if (Array.isArray(req.body.deleteIds)) {
-            // Already an array
-            deleteIds = req.body.deleteIds.map((id: any) => parseInt(String(id), 10)).filter((id: number) => !isNaN(id));
+            // Already an array - support both numbers and strings
+            deleteIds = req.body.deleteIds.map((id: any) => {
+              const numId = parseInt(String(id), 10);
+              return isNaN(numId) ? String(id) : numId;
+            });
           } else {
             throw new Error('deleteIds must be an array');
           }
@@ -329,6 +416,7 @@ router.patch(
         audios: files.audios || [],
         videos: files.videos || [],
         images: files.images || [],
+        restrictedQueries: restrictedQueries.length > 0 ? restrictedQueries : undefined,
         deleteIds: deleteIds.length > 0 ? deleteIds : undefined,
       });
 
@@ -377,7 +465,7 @@ router.delete('/:id', authenticate, async (req: Request, res: Response) => {
     }
 
     res.json({
-      message: 'Knowledge base deleted successfully',
+      message: 'Knowledge base deletion started. The knowledge base will be deleted once the process completes.',
     });
   } catch (error: any) {
     console.error('Delete knowledge base error:', error);

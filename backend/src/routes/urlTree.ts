@@ -30,7 +30,7 @@ router.get('/by-id/:contentId', authenticate, async (req: Request, res: Response
 
     if (!contentItem.treeDocumentId) {
       return res.status(404).json({
-        message: 'Tree document ID not found for this content item',
+        message: 'URL tree has not been created yet. Please wait for the scraping process to complete.',
       });
     }
 
@@ -39,7 +39,7 @@ router.get('/by-id/:contentId', authenticate, async (req: Request, res: Response
 
     if (!treeDocument) {
       return res.status(404).json({
-        message: 'URL tree not found in MongoDB for the given document ID',
+        message: 'URL tree has not been created yet. Please wait for the scraping process to complete.',
       });
     }
 
@@ -85,7 +85,7 @@ router.get('/:url', authenticate, async (req: Request, res: Response) => {
 
     if (!treeDocument) {
       return res.status(404).json({
-        message: 'URL tree not found',
+        message: 'URL tree has not been created yet. Please wait for the scraping process to complete.',
       });
     }
 

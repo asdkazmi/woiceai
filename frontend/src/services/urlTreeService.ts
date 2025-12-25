@@ -3,6 +3,7 @@ import api from './api';
 export interface TreeNode {
   url: string;
   parentUrl: string | null;
+  scrapped?: boolean;
   children: TreeNode[];
 }
 

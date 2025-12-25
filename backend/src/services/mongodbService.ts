@@ -6,6 +6,7 @@ let db: Db | null = null;
 export interface UrlTreeItem {
   parent_url: string;
   url: string;
+  scrapped?: boolean;
 }
 
 export interface UrlTreeDocument {
@@ -161,12 +162,17 @@ export function buildTreeStructure(
       childNode = {
         url: item.url,
         parentUrl: item.parent_url,
+        scrapped: item.scrapped,
         children: [],
       };
       urlMap.set(item.url, childNode);
     } else {
       // Update parent URL if not set
       childNode.parentUrl = item.parent_url;
+      // Update scrapped status if available
+      if (item.scrapped !== undefined) {
+        childNode.scrapped = item.scrapped;
+      }
     }
 
     // Add child to parent if not already added
@@ -182,6 +188,7 @@ export function buildTreeStructure(
 export interface TreeNode {
   url: string;
   parentUrl: string | null;
+  scrapped?: boolean;
   children: TreeNode[];
 }
 

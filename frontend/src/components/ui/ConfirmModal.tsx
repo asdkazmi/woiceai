@@ -7,7 +7,7 @@ interface ConfirmModalProps {
   onClose: () => void;
   onConfirm: () => void;
   title: string;
-  message: string;
+  message: string | React.ReactNode;
   confirmText?: string;
   cancelText?: string;
   variant?: 'danger' | 'warning' | 'info';
@@ -64,7 +64,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
         <div className="p-4">
           <div className="flex items-start gap-3 mb-4">
             <AlertTriangle className={`${variantColors[variant]} flex-shrink-0 mt-0.5`} size={24} />
-            <p className="text-base text-gray-700">{message}</p>
+            <div className="text-base text-gray-700">{message}</div>
           </div>
           
           <div className="flex justify-end gap-2">

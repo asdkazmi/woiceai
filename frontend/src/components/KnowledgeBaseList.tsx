@@ -27,13 +27,33 @@ const KnowledgeBaseList: React.FC = () => {
     loadKnowledgeBases();
   }, [currentPage, searchQuery]);
 
+  // Poll for deletion status updates and indexing progress
+  useEffect(() => {
+    const hasDeleting = knowledgeBases.some(kb => kb.status === 'deleting');
+    const hasIndexing = knowledgeBases.some(kb => hasIndexingInProgress(kb));
+    if (hasDeleting || hasIndexing) {
+      const interval = setInterval(() => {
+        loadKnowledgeBases();
+      }, 5000); // Poll every 5 seconds
+      return () => clearInterval(interval);
+    }
+  }, [knowledgeBases]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Auto-select KB if kbId is in URL
   useEffect(() => {
     if (kbId && knowledgeBases.length > 0) {
       const kb = knowledgeBases.find(k => k.id === parseInt(kbId));
       if (kb) {
-        setSelectedKB(kb);
+        // If knowledge base is being deleted, don't select it
+        if (kb.status === 'deleting') {
+          setSelectedKB(null);
+          navigate('/knowledge-bases');
+        } else {
+          setSelectedKB(kb);
+        }
       } else {
+        // Knowledge base not found (might have been deleted)
+        setSelectedKB(null);
         navigate('/knowledge-bases');
       }
     } else if (!kbId) {
@@ -82,17 +102,30 @@ const KnowledgeBaseList: React.FC = () => {
       return kb.contentStats;
     }
     const contents = kb.knowledgeBaseContents || [];
-    const completed = contents.filter(c => c.status === 'completed').length;
-    const pending = contents.filter(c => c.status === 'pending').length;
-    const queued = contents.filter(c => c.status === 'queued').length;
-    const processing = contents.filter(c => c.status === 'processing').length;
-    const failed = contents.filter(c => c.status === 'failed').length;
-    return { completed, pending, queued, processing, failed, total: contents.length };
+    // Exclude non-indexing items from stats for percentage calculation
+    const indexingContents = contents.filter(c => c.status !== 'non-indexing');
+    const completed = indexingContents.filter(c => c.status === 'completed').length;
+    const pending = indexingContents.filter(c => c.status === 'pending').length;
+    const queued = indexingContents.filter(c => c.status === 'queued').length;
+    const processing = indexingContents.filter(c => c.status === 'processing').length;
+    const failed = indexingContents.filter(c => c.status === 'failed').length;
+    const nonIndexing = contents.filter(c => c.status === 'non-indexing').length;
+    return { completed, pending, queued, processing, failed, total: indexingContents.length, nonIndexing };
   };
 
   const hasIndexingInProgress = (kb: KnowledgeBase) => {
-    const stats = getContentStats(kb);
-    return stats.pending > 0 || stats.queued > 0 || stats.processing > 0;
+    // Check contentStats first (from backend) as it's more reliable
+    if (kb.contentStats) {
+      return (kb.contentStats.pending || 0) > 0 || 
+             (kb.contentStats.queued || 0) > 0 || 
+             (kb.contentStats.processing || 0) > 0;
+    }
+    // Fallback to checking contents array if available
+    const contents = kb.knowledgeBaseContents || [];
+    const indexingContents = contents.filter(c => c.status !== 'non-indexing');
+    return indexingContents.some(c => 
+      c.status === 'pending' || c.status === 'queued' || c.status === 'processing'
+    );
   };
 
   if (selectedKB) {
@@ -185,30 +218,76 @@ const KnowledgeBaseList: React.FC = () => {
             {knowledgeBases.map((kb) => {
               const stats = getContentStats(kb);
               const isIndexing = hasIndexingInProgress(kb);
+              const isDeleting = kb.status === 'deleting';
               
               return (
                 <div
                   key={kb.id}
-                  className="bg-white border border-gray-200 rounded-md p-6 hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => navigate(`/knowledge-bases/${kb.id}`)}
+                  className={`relative bg-white border border-gray-200 rounded-md p-6 transition-shadow ${
+                    isDeleting 
+                      ? 'opacity-60 cursor-not-allowed' 
+                      : 'hover:shadow-md cursor-pointer'
+                  }`}
+                  onClick={() => !isDeleting && navigate(`/knowledge-bases/${kb.id}`)}
                 >
+                  {/* Animated yellow dot indicator for items in progress */}
+                  {!isDeleting && isIndexing && (
+                    <div className="absolute z-10" style={{ right: '-4px', top: '-4px' }}>
+                      <div className="relative w-3 h-3">
+                        {/* Main pulsing dot */}
+                        <div className="absolute inset-0 bg-yellow-500 rounded-full animate-pulse"></div>
+                        {/* Circular wave rings - using custom animation */}
+                        <div 
+                          className="absolute inset-0 bg-yellow-500 rounded-full opacity-60"
+                          style={{
+                            animation: 'ping-wave 2s cubic-bezier(0, 0, 0.2, 1) infinite'
+                          }}
+                        ></div>
+                        <style>{`
+                          @keyframes ping-wave {
+                            0% {
+                              transform: scale(1);
+                              opacity: 0.6;
+                            }
+                            50%, 100% {
+                              transform: scale(2.5);
+                              opacity: 0;
+                            }
+                          }
+                        `}</style>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-2 hover:text-primary">
-                        {kb.name}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className={`text-lg font-semibold mb-2 ${
+                          isDeleting ? 'text-gray-400' : 'text-gray-800 hover:text-primary'
+                        }`}>
+                          {kb.name}
+                        </h3>
+                        {isDeleting && (
+                          <Spinner size="sm" />
+                        )}
+                      </div>
+                      {isDeleting && (
+                        <p className="text-sm text-orange-600 font-medium">Deleting...</p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <CircularProgress
-                        completed={stats.completed}
-                        pending={stats.pending}
-                        queued={stats.queued}
-                        processing={stats.processing}
-                        failed={stats.failed}
-                        total={stats.total}
-                        size={28}
-                        isAnimating={isIndexing}
-                      />
+                      {!isDeleting && (
+                        <CircularProgress
+                          completed={stats.completed}
+                          pending={stats.pending}
+                          queued={stats.queued}
+                          processing={stats.processing}
+                          failed={stats.failed}
+                          total={stats.total}
+                          nonIndexing={stats.nonIndexing || 0}
+                          size={28}
+                        />
+                      )}
                     </div>
                   </div>
                   

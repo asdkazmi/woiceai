@@ -7,6 +7,7 @@ interface CircularProgressProps {
   processing: number;
   failed: number;
   total: number;
+  nonIndexing?: number;
   size?: number;
   className?: string;
   isAnimating?: boolean;
@@ -19,6 +20,7 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
   processing,
   failed,
   total,
+  nonIndexing = 0,
   size = 28,
   className = '',
   isAnimating = false,
@@ -51,12 +53,13 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap z-50 shadow-lg">
             <div className="font-semibold mb-1">Content Status</div>
             <div className="border-t border-gray-700 pt-1 mt-1 space-y-0.5">
-              <div>Total: 0</div>
+              <div>Total (indexing): 0</div>
               <div className="text-green-400">Completed: 0</div>
               <div className="text-yellow-400">Pending: 0</div>
               <div className="text-yellow-400">Queued: 0</div>
               <div className="text-yellow-400">Processing: 0</div>
               <div className="text-red-400">Failed: 0</div>
+              {nonIndexing > 0 && <div className="text-gray-400">Non-indexing: {nonIndexing}</div>}
             </div>
           </div>
         )}
@@ -110,19 +113,20 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
         </svg>
       </div>
       {/* Tooltip */}
-      {showTooltip && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap z-50 shadow-lg">
-          <div className="font-semibold mb-1">Content Status</div>
-          <div className="border-t border-gray-700 pt-1 mt-1 space-y-0.5">
-            <div>Total: {total}</div>
-            <div className="text-green-400">Completed: {completed}</div>
-            {pending > 0 && <div className="text-yellow-400">Pending: {pending}</div>}
-            {queued > 0 && <div className="text-yellow-400">Queued: {queued}</div>}
-            {processing > 0 && <div className="text-yellow-400">Processing: {processing}</div>}
-            {failed > 0 && <div className="text-red-400">Failed: {failed}</div>}
+        {showTooltip && (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap z-50 shadow-lg">
+            <div className="font-semibold mb-1">Content Status</div>
+            <div className="border-t border-gray-700 pt-1 mt-1 space-y-0.5">
+              <div>Total (indexing): {total}</div>
+              <div className="text-green-400">Completed: {completed}</div>
+              {pending > 0 && <div className="text-yellow-400">Pending: {pending}</div>}
+              {queued > 0 && <div className="text-yellow-400">Queued: {queued}</div>}
+              {processing > 0 && <div className="text-yellow-400">Processing: {processing}</div>}
+              {failed > 0 && <div className="text-red-400">Failed: {failed}</div>}
+              {nonIndexing > 0 && <div className="text-gray-400">Non-indexing: {nonIndexing}</div>}
+            </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   );
 };

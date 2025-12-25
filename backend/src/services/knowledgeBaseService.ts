@@ -2,6 +2,7 @@ import { IKnowledgeBase, IKnowledgeBaseContent, KnowledgeBase, KnowledgeBaseCont
 import { S3Service, UploadedFile } from './aws/s3Service';
 import { SNSService } from './aws/snsService';
 import { KnowledgeBaseContentHelper, PreparedContent } from './knowledgeBaseContentHelper';
+import { RestrictedQueryService } from './restrictedQueryService';
 
 // Extended interface for content with document URL
 interface IKnowledgeBaseContentWithUrl extends IKnowledgeBaseContent {
@@ -16,6 +17,7 @@ export interface CreateKnowledgeBaseData {
   audios?: Express.Multer.File[];
   videos?: Express.Multer.File[];
   images?: Express.Multer.File[];
+  restrictedQueries?: string[];
   depth?: number;
 }
 
@@ -27,7 +29,8 @@ export interface UpdateKnowledgeBaseData {
   audios?: Express.Multer.File[];
   videos?: Express.Multer.File[];
   images?: Express.Multer.File[];
-  deleteIds?: number[];
+  restrictedQueries?: string[];
+  deleteIds?: (number | string)[];
 }
 
 export class KnowledgeBaseService {
@@ -47,9 +50,31 @@ export class KnowledgeBaseService {
       return null;
     }
 
+    // Fetch restricted queries from MongoDB and add them as content items
+    let restrictedQueriesContent: IKnowledgeBaseContent[] = [];
+    try {
+      const restrictedQueryDoc = await RestrictedQueryService.getByKnowledgeBaseId(id, userId);
+      if (restrictedQueryDoc && restrictedQueryDoc.restricted_queries.length > 0) {
+        restrictedQueriesContent = restrictedQueryDoc.restricted_queries.map((query, index) => ({
+          id: undefined, // No MySQL ID for MongoDB items
+          knowledgeBaseId: id,
+          content: query,
+          textContent: query,
+          type: 'restricted_query' as const,
+          status: 'non-indexing' as const,
+          createdAt: restrictedQueryDoc.created_at,
+          updatedAt: restrictedQueryDoc.updated_at,
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching restricted queries from MongoDB:', error);
+      // Continue without restricted queries if MongoDB fails
+    }
+
     // Generate presigned URLs for file content types
+    let contentsWithUrls: IKnowledgeBaseContentWithUrl[] = [];
     if (kb.knowledgeBaseContents && kb.knowledgeBaseContents.length > 0) {
-      const contentsWithUrls = await Promise.all(
+      contentsWithUrls = await Promise.all(
         kb.knowledgeBaseContents.map(async (content) => {
           const contentWithUrl: IKnowledgeBaseContentWithUrl = { ...content };
 
@@ -72,11 +97,12 @@ export class KnowledgeBaseService {
           return contentWithUrl;
         })
       );
-
-      return { ...kb, knowledgeBaseContents: contentsWithUrls } as IKnowledgeBaseWithContents;
     }
 
-    return kb as IKnowledgeBaseWithContents;
+    // Combine regular content with restricted queries
+    const allContents = [...contentsWithUrls, ...restrictedQueriesContent];
+
+    return { ...kb, knowledgeBaseContents: allContents } as IKnowledgeBaseWithContents;
   }
 
   /**
@@ -118,7 +144,7 @@ export class KnowledgeBaseService {
     }
 
     // Store new content
-    if (data.files || data.urls || data.texts || data.audios || data.videos || data.images) {
+    if (data.files || data.urls || data.texts || data.audios || data.videos || data.images || data.restrictedQueries) {
       await this.storeContent(data, id);
     }
 
@@ -132,6 +158,8 @@ export class KnowledgeBaseService {
 
   /**
    * Delete a knowledge base
+   * Sets status to 'deleting' and sends SNS event
+   * Actual deletion happens when webhook receives completion status
    */
   static async delete(id: number, userId: number): Promise<boolean> {
     const kb = await KnowledgeBase.findById(id);
@@ -139,9 +167,37 @@ export class KnowledgeBaseService {
       return false;
     }
 
-    // Check if any content is in progress
+    // Don't allow deletion if already deleting
+    if (kb.status === 'deleting') {
+      return false;
+    }
+
+    // Check if any content is in progress (except deleting)
     const inProgressCount = await KnowledgeBaseContent.countInProgress(id);
     if (inProgressCount > 0) {
+      return false;
+    }
+
+    // Set status to 'deleting' to show progress
+    await KnowledgeBase.update(id, { status: 'deleting' });
+
+    // Publish delete event to SNS with DELETE_KNOWLEDGEBASE action
+    // The actual deletion from MongoDB and database cleanup happens
+    // when the webhook receives the completion status from the Lambda function
+    await SNSService.publishKnowledgeBaseDeleted(id);
+
+    // Return true to indicate deletion process has started
+    // The actual DB deletion will happen via webhook
+    return true;
+  }
+
+  /**
+   * Complete deletion of a knowledge base
+   * Called by webhook when deletion is confirmed
+   */
+  static async completeDeletion(id: number): Promise<boolean> {
+    const kb = await KnowledgeBase.findById(id);
+    if (!kb || kb.status !== 'deleting') {
       return false;
     }
 
@@ -155,9 +211,6 @@ export class KnowledgeBaseService {
     if (fileContentIds.length > 0) {
       await S3Service.deleteFiles(fileContentIds);
     }
-
-    // Publish delete event to SNS
-    await SNSService.publishKnowledgeBaseDeleted(id);
 
     // Delete the knowledge base (cascade will delete contents)
     return await KnowledgeBase.delete(id);
@@ -189,7 +242,25 @@ export class KnowledgeBaseService {
       uploadedImages.push(...(await S3Service.uploadFiles(data.images)));
     }
 
-    // Prepare content attributes
+    // Store restricted queries in MongoDB (separate from content)
+    if (data.restrictedQueries && data.restrictedQueries.length > 0) {
+      try {
+        // Get userId from knowledge base
+        const kb = await KnowledgeBase.findById(knowledgeBaseId);
+        if (kb) {
+          await RestrictedQueryService.addQueries(
+            knowledgeBaseId,
+            kb.userId,
+            data.restrictedQueries
+          );
+        }
+      } catch (error) {
+        console.error('Error storing restricted queries in MongoDB:', error);
+        // Don't throw - allow other content to be processed
+      }
+    }
+
+    // Prepare content attributes (excluding restricted queries - they go to MongoDB)
     const filesAttrs = KnowledgeBaseContentHelper.prepareFilesTypeAttributes(uploadedFiles);
     const urlsAttrs = KnowledgeBaseContentHelper.prepareUrlsTypeAttributes(data.urls || []);
     const textsAttrs = KnowledgeBaseContentHelper.prepareTextTypeAttributes(data.texts || []);
@@ -216,7 +287,7 @@ export class KnowledgeBaseService {
       content: attr.content,
       textContent: attr.textContent,
       type: attr.type as any,
-      status: 'pending',
+      status: attr.status as any || 'pending',
       depth: attr.depth,
       filename: attr.filename,
     }));
@@ -247,9 +318,15 @@ export class KnowledgeBaseService {
 
   /**
    * Delete content from a knowledge base
+   * @param contentIds Array of content IDs (for MySQL content) or content strings (for restricted queries)
    */
-  private static async deleteContent(contentIds: number[], knowledgeBaseId: number): Promise<void> {
-    const contents = await KnowledgeBaseContent.findByIds(contentIds);
+  private static async deleteContent(contentIds: (number | string)[], knowledgeBaseId: number): Promise<void> {
+    // Separate numeric IDs (MySQL content) from strings (restricted queries)
+    const numericIds = contentIds.filter((id): id is number => typeof id === 'number');
+    const stringIds = contentIds.filter((id): id is string => typeof id === 'string');
+
+    // Fetch MySQL content by IDs
+    const contents = numericIds.length > 0 ? await KnowledgeBaseContent.findByIds(numericIds) : [];
 
     // Filter to only delete contents that belong to this knowledge base
     const validContents = contents.filter((c) => c.knowledgeBaseId === knowledgeBaseId);
@@ -264,9 +341,39 @@ export class KnowledgeBaseService {
       await S3Service.deleteFiles(fileContentIds);
     }
 
+    // Handle restricted queries (from string IDs or from MySQL content)
+    const restrictedQueriesToDelete: string[] = [...stringIds]; // Add string IDs (restricted queries by content)
+    
+    // Also check if any MySQL content is restricted_query type
+    validContents.forEach((c) => {
+      if (c.type === 'restricted_query' && c.content) {
+        restrictedQueriesToDelete.push(c.content);
+      }
+    });
+
+    // Delete restricted queries from MongoDB
+    if (restrictedQueriesToDelete.length > 0) {
+      try {
+        const kb = await KnowledgeBase.findById(knowledgeBaseId);
+        if (kb) {
+          await RestrictedQueryService.removeQueries(
+            knowledgeBaseId,
+            kb.userId,
+            restrictedQueriesToDelete
+          );
+        }
+      } catch (error) {
+        console.error('Error deleting restricted queries from MongoDB:', error);
+        // Continue with regular content deletion
+      }
+    }
+
+    // Filter out restricted queries from regular content
+    const regularContents = validContents.filter((c) => c.type !== 'restricted_query');
+
     // Publish SNS events to delete content from vector storage
     // This must happen BEFORE deleting from database so we have the content data
-    for (const content of validContents) {
+    for (const content of regularContents) {
       // For text content, use the ID as content (matching Laravel behavior)
       // For other types, use the content field (file path, URL, etc.)
       const contentValue = content.type === 'text' && content.id 
@@ -281,9 +388,54 @@ export class KnowledgeBaseService {
       );
     }
 
-    // Delete content records from database
-    const idsToDelete = validContents.map((c) => c.id!);
-    await KnowledgeBaseContent.deleteMany(idsToDelete);
+    // Delete content records from database (only regular content, not restricted queries)
+    const idsToDelete = regularContents.map((c) => c.id!).filter((id): id is number => id !== undefined);
+    if (idsToDelete.length > 0) {
+      await KnowledgeBaseContent.deleteMany(idsToDelete);
+    }
+  }
+
+  /**
+   * Retry indexing a failed content item
+   * Sets status back to 'pending' and republishes SNS event
+   */
+  static async retryContent(id: number, userId: number): Promise<IKnowledgeBaseContent | null> {
+    const content = await KnowledgeBaseContent.findById(id);
+    if (!content) {
+      return null;
+    }
+
+    // Verify user owns the knowledge base
+    const kb = await KnowledgeBase.findById(content.knowledgeBaseId);
+    if (!kb || kb.userId !== userId) {
+      return null;
+    }
+
+    // Only allow retry for failed content (and skip restricted queries)
+    if (content.status !== 'failed') {
+      throw new Error('Content is not in failed status');
+    }
+
+    if (content.type === 'restricted_query') {
+      throw new Error('Cannot retry restricted queries');
+    }
+
+    // Update status to pending
+    await KnowledgeBaseContent.update(id, { status: 'pending' });
+
+    // Republish SNS event for indexing
+    await SNSService.publishContentAdded(
+      content.knowledgeBaseId,
+      content.type === 'text' ? content.id!.toString() : content.content,
+      content.type,
+      content.depth || undefined,
+      content.filename || undefined,
+      content.textContent || undefined,
+      content.id?.toString() || undefined // Send the primary key as UNIQUE_ID
+    );
+
+    // Return updated content
+    return await KnowledgeBaseContent.findById(id);
   }
 }
 

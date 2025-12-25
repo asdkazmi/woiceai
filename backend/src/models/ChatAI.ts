@@ -96,6 +96,24 @@ export class ChatAI {
     return rows.map((row: any) => this.mapRowToChatAI(row));
   }
 
+  static async findByNameAndKnowledgeBase(name: string, knowledgeBaseId: number, userId?: number): Promise<IChatAI | null> {
+    let query = `SELECT id, knowledge_base_id as knowledgeBaseId, user_id as userId, name, 
+                        llm_name as llmName, model_name as modelName, settings, is_published as isPublished,
+                        created_at as createdAt, updated_at as updatedAt
+                 FROM chat_ais WHERE name = ? AND knowledge_base_id = ?`;
+    const params: any[] = [name, knowledgeBaseId];
+
+    if (userId !== undefined) {
+      query += ' AND user_id = ?';
+      params.push(userId);
+    }
+
+    const [rows]: any = await pool.execute(query, params);
+
+    if (rows.length === 0) return null;
+    return this.mapRowToChatAI(rows[0]);
+  }
+
   static async update(id: number, updates: Partial<IChatAI>): Promise<IChatAI | null> {
     const fields: string[] = [];
     const values: any[] = [];

@@ -5,7 +5,7 @@ export interface IKnowledgeBase {
   userId: number;
   name: string;
   knowledgeBaseApiId?: string | null;
-  status?: 'pending' | 'queued' | 'processing' | 'indexed' | 'failed';
+  status?: 'pending' | 'queued' | 'processing' | 'indexed' | 'failed' | 'deleting';
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -28,13 +28,14 @@ export interface IKnowledgeBaseContent {
   knowledgeBaseId: number;
   content: string;
   textContent?: string | null;
-  type: 'file' | 'url' | 'text' | 'audio' | 'video' | 'image';
-  status?: 'pending' | 'queued' | 'processing' | 'completed' | 'failed';
+  type: 'file' | 'url' | 'text' | 'audio' | 'video' | 'image' | 'restricted_query';
+  status?: 'pending' | 'queued' | 'processing' | 'completed' | 'failed' | 'non-indexing';
   depth?: number | null;
   filename?: string | null;
   transcription?: string | null;
   explanation?: string | null;
   sceneExplanation?: string | null;
+  scrappingStatus?: string | null;
   childPages?: any[] | null;
   treeDocumentId?: string | null;
   documentUrl?: string | null;
@@ -48,6 +49,7 @@ export class KnowledgeBase {
   static readonly STATUS_PROCESSING = 'processing';
   static readonly STATUS_COMPLETED = 'indexed';
   static readonly STATUS_FAILED = 'failed';
+  static readonly STATUS_DELETING = 'deleting';
 
   static async create(kbData: IKnowledgeBase): Promise<IKnowledgeBase> {
     const { userId, name, knowledgeBaseApiId, status } = kbData;
@@ -180,12 +182,14 @@ export class KnowledgeBaseContent {
   static readonly TYPE_AUDIO = 'audio';
   static readonly TYPE_VIDEO = 'video';
   static readonly TYPE_IMAGE = 'image';
+  static readonly TYPE_RESTRICTED_QUERY = 'restricted_query';
 
   static readonly STATUS_PENDING = 'pending';
   static readonly STATUS_QUEUED = 'queued';
   static readonly STATUS_PROCESSING = 'processing';
   static readonly STATUS_COMPLETED = 'completed';
   static readonly STATUS_FAILED = 'failed';
+  static readonly STATUS_NON_INDEXING = 'non-indexing';
 
   static readonly DEFAULT_DEPTH = 1;
 
@@ -243,7 +247,7 @@ export class KnowledgeBaseContent {
     const [rows]: any = await pool.execute(
       `SELECT id, knowledge_base_id as knowledgeBaseId, content, text_content as textContent,
               type, status, depth, filename, transcription, explanation, scene_explanation as sceneExplanation,
-              child_pages as childPages, tree_document_id as treeDocumentId, created_at as createdAt, updated_at as updatedAt
+              scrapping_status as scrappingStatus, child_pages as childPages, tree_document_id as treeDocumentId, created_at as createdAt, updated_at as updatedAt
        FROM knowledge_base_contents WHERE id = ?`,
       [id]
     );
@@ -256,7 +260,7 @@ export class KnowledgeBaseContent {
     const [rows]: any = await pool.execute(
       `SELECT id, knowledge_base_id as knowledgeBaseId, content, text_content as textContent,
               type, status, depth, filename, transcription, explanation, scene_explanation as sceneExplanation,
-              child_pages as childPages, tree_document_id as treeDocumentId, created_at as createdAt, updated_at as updatedAt
+              scrapping_status as scrappingStatus, child_pages as childPages, tree_document_id as treeDocumentId, created_at as createdAt, updated_at as updatedAt
        FROM knowledge_base_contents WHERE knowledge_base_id = ? ORDER BY created_at DESC`,
       [knowledgeBaseId]
     );
@@ -271,7 +275,7 @@ export class KnowledgeBaseContent {
     const [rows]: any = await pool.execute(
       `SELECT id, knowledge_base_id as knowledgeBaseId, content, text_content as textContent,
               type, status, depth, filename, transcription, explanation, scene_explanation as sceneExplanation,
-              child_pages as childPages, tree_document_id as treeDocumentId, created_at as createdAt, updated_at as updatedAt
+              scrapping_status as scrappingStatus, child_pages as childPages, tree_document_id as treeDocumentId, created_at as createdAt, updated_at as updatedAt
        FROM knowledge_base_contents WHERE id IN (${placeholders})`,
       ids
     );
@@ -306,7 +310,7 @@ export class KnowledgeBaseContent {
     const [rows]: any = await pool.execute(
       `SELECT id, knowledge_base_id as knowledgeBaseId, content, text_content as textContent,
               type, status, depth, filename, transcription, explanation, scene_explanation as sceneExplanation,
-              child_pages as childPages, tree_document_id as treeDocumentId, created_at as createdAt, updated_at as updatedAt
+              scrapping_status as scrappingStatus, child_pages as childPages, tree_document_id as treeDocumentId, created_at as createdAt, updated_at as updatedAt
        FROM knowledge_base_contents 
        WHERE knowledge_base_id = ? AND content = ? LIMIT 1`,
       [knowledgeBaseId, content]
@@ -327,7 +331,7 @@ export class KnowledgeBaseContent {
     const [rows]: any = await pool.execute(
       `SELECT id, knowledge_base_id as knowledgeBaseId, content, text_content as textContent,
               type, status, depth, filename, transcription, explanation, scene_explanation as sceneExplanation,
-              child_pages as childPages, tree_document_id as treeDocumentId, created_at as createdAt, updated_at as updatedAt
+              scrapping_status as scrappingStatus, child_pages as childPages, tree_document_id as treeDocumentId, created_at as createdAt, updated_at as updatedAt
        FROM knowledge_base_contents 
        WHERE knowledge_base_id = ? AND id = ? LIMIT 1`,
       [knowledgeBaseId, parseInt(uniqueId)]
@@ -374,6 +378,10 @@ export class KnowledgeBaseContent {
       fields.push('scene_explanation = ?');
       values.push(updates.sceneExplanation);
     }
+    if (updates.scrappingStatus !== undefined) {
+      fields.push('scrapping_status = ?');
+      values.push(updates.scrappingStatus);
+    }
     if (updates.childPages !== undefined) {
       fields.push('child_pages = ?');
       values.push(updates.childPages ? JSON.stringify(updates.childPages) : null);
@@ -409,6 +417,7 @@ export class KnowledgeBaseContent {
       transcription: row.transcription,
       explanation: row.explanation || null,
       sceneExplanation: row.sceneExplanation || null,
+      scrappingStatus: row.scrappingStatus || null,
       childPages: row.childPages ? (typeof row.childPages === 'string' ? JSON.parse(row.childPages) : row.childPages) : null,
       treeDocumentId: row.treeDocumentId || null,
       createdAt: row.createdAt,

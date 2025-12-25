@@ -55,7 +55,14 @@ const UrlTreeModal: React.FC<UrlTreeModalProps> = ({ isOpen, onClose, contentId,
       setTotalPages(data.totalPages);
       setDisplayRootUrl(data.rootUrl);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load URL tree');
+      // Show user-friendly error messages
+      const errorMessage = err.response?.data?.message || 'Failed to load URL tree';
+      // Convert technical messages to user-friendly ones
+      if (errorMessage.includes('tree document') || errorMessage.includes('MongoDB') || errorMessage.includes('document ID')) {
+        setError('URL tree has not been created yet. Please wait for the scraping process to complete.');
+      } else {
+        setError(errorMessage);
+      }
       console.error('Error loading URL tree:', err);
     } finally {
       setLoading(false);
@@ -89,11 +96,16 @@ const UrlTreeModal: React.FC<UrlTreeModalProps> = ({ isOpen, onClose, contentId,
   const renderTreeNode = (node: TreeNodeWithState, level: number = 0): React.ReactNode => {
     const hasChildren = node.children.length > 0;
     const indent = level * 24;
+    const isScrapped = node.scrapped === true;
+    const isFailed = node.scrapped === false;
 
     return (
       <div key={node.url} className="select-none">
         <div
-          className="flex items-center py-2 px-3 hover:bg-gray-50 rounded-md cursor-pointer group"
+          className={`flex items-center py-2 px-3 cursor-pointer group ${
+            isScrapped ? 'border-l-2 border-green-500' : 
+            isFailed ? 'border-l-2 border-red-500' : ''
+          }`}
           style={{ paddingLeft: `${12 + indent}px` }}
           onClick={() => hasChildren && toggleNode(node)}
         >
@@ -108,17 +120,34 @@ const UrlTreeModal: React.FC<UrlTreeModalProps> = ({ isOpen, onClose, contentId,
           ) : (
             <div className="w-6 mr-2" /> // Spacer for alignment
           )}
-          <LinkIcon size={14} className="text-gray-400 mr-2 flex-shrink-0" />
+          <LinkIcon 
+            size={14} 
+            className={`mr-2 flex-shrink-0 ${
+              isScrapped ? 'text-green-600' : 
+              isFailed ? 'text-red-600' : 
+              'text-gray-400'
+            }`} 
+          />
           <a
             href={node.url}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()} // Prevent toggling when clicking link
-            className="text-sm text-primary hover:underline flex-1 truncate"
+            className={`text-sm hover:underline flex-1 truncate ${
+              isScrapped ? 'text-green-700' : 
+              isFailed ? 'text-red-700' : 
+              'text-primary'
+            }`}
             title={node.url}
           >
             {node.url}
           </a>
+          {isScrapped && (
+            <span className="ml-2 text-xs text-green-600 font-medium">✓</span>
+          )}
+          {isFailed && (
+            <span className="ml-2 text-xs text-red-600 font-medium">✗</span>
+          )}
         </div>
         {hasChildren && node.isExpanded && (
           <div>

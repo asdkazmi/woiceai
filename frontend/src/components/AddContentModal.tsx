@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UpdateKnowledgeBaseData } from '../services/knowledgeBaseService';
-import { X, Plus, Trash2, FileText, Link as LinkIcon, Music, Video, Image, UploadCloud, Type, ArrowLeft } from 'lucide-react';
+import { X, Plus, Trash2, FileText, Link as LinkIcon, Music, Video, Image, UploadCloud, Type, ArrowLeft, Database } from 'lucide-react';
 import Button from './ui/Button';
 import Input from './ui/Input';
 import IconButton from './ui/IconButton';
@@ -18,7 +18,7 @@ interface FileWithProgress {
 }
 
 const AddContentModal: React.FC<AddContentModalProps> = ({ onClose, onAdd }) => {
-  const [selectedType, setSelectedType] = useState<'files' | 'website' | 'text' | null>(null);
+  const [selectedType, setSelectedType] = useState<'files' | 'website' | 'text' | 'restricted' | null>(null);
   const [files, setFiles] = useState<FileWithProgress[]>([]);
   const [urlInput, setUrlInput] = useState('');
   const [urlDepth, setUrlDepth] = useState(1);
@@ -30,17 +30,12 @@ const AddContentModal: React.FC<AddContentModalProps> = ({ onClose, onAdd }) => 
   const [audios, setAudios] = useState<FileWithProgress[]>([]);
   const [videos, setVideos] = useState<FileWithProgress[]>([]);
   const [images, setImages] = useState<FileWithProgress[]>([]);
+  const [restrictedQueryInput, setRestrictedQueryInput] = useState('');
+  const [restrictedQueries, setRestrictedQueries] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  const handleFileChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    setter: React.Dispatch<React.SetStateAction<FileWithProgress[]>>
-  ) => {
-    const selectedFiles = Array.from(e.target.files || []);
-    setter(selectedFiles.map(file => ({ file, progress: 0 })));
-  };
 
   const removeFile = (
     index: number,
@@ -90,26 +85,72 @@ const AddContentModal: React.FC<AddContentModalProps> = ({ onClose, onAdd }) => 
     }
   };
 
+  const handleAddRestrictedQuery = () => {
+    if (restrictedQueryInput.trim()) {
+      setRestrictedQueries([...restrictedQueries, restrictedQueryInput.trim()]);
+      setRestrictedQueryInput('');
+    }
+  };
+
+  const handleRemoveRestrictedQuery = (index: number) => {
+    setRestrictedQueries(restrictedQueries.filter((_, i) => i !== index));
+  };
+
+  // Get total count of all added items
+  const totalAddedItems = files.length + urls.length + texts.length + audios.length + videos.length + images.length + restrictedQueries.length;
+
+  // Helper to get type icon (matching KnowledgeBaseDetail)
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'file':
+        return <FileText size={20} className="text-blue-600" />;
+      case 'url':
+        return <LinkIcon size={20} className="text-green-600" />;
+      case 'text':
+        return <FileText size={20} className="text-purple-600" />;
+      case 'audio':
+        return <Music size={20} className="text-yellow-600" />;
+      case 'video':
+        return <Video size={20} className="text-red-600" />;
+      case 'image':
+        return <Image size={20} className="text-pink-600" />;
+      case 'restricted_query':
+        return <FileText size={20} className="text-orange-600" />;
+      default:
+        return <FileText size={20} className="text-gray-600" />;
+    }
+  };
+
+  // Helper to get type color (matching KnowledgeBaseDetail)
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'file': return 'bg-blue-50';
+      case 'url': return 'bg-green-50';
+      case 'text': return 'bg-purple-50';
+      case 'audio': return 'bg-yellow-50';
+      case 'video': return 'bg-red-50';
+      case 'image': return 'bg-pink-50';
+      case 'restricted_query': return 'bg-orange-50';
+      default: return 'bg-gray-50';
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const updateData: UpdateKnowledgeBaseData = {};
 
-    if (selectedType === 'files') {
-      if (files.length > 0) updateData.files = files.map(f => f.file);
-      if (audios.length > 0) updateData.audios = audios.map(f => f.file);
-      if (videos.length > 0) updateData.videos = videos.map(f => f.file);
-      if (images.length > 0) updateData.images = images.map(f => f.file);
-    }
-    if (selectedType === 'website') {
-      if (urls.length > 0) updateData.urls = urls;
-    }
-    if (selectedType === 'text') {
-      if (texts.length > 0) updateData.texts = texts;
-    }
+    // Include all content types, not just the selected one
+    if (files.length > 0) updateData.files = files.map(f => f.file);
+    if (audios.length > 0) updateData.audios = audios.map(f => f.file);
+    if (videos.length > 0) updateData.videos = videos.map(f => f.file);
+    if (images.length > 0) updateData.images = images.map(f => f.file);
+    if (urls.length > 0) updateData.urls = urls;
+    if (texts.length > 0) updateData.texts = texts;
+    if (restrictedQueries.length > 0) updateData.restrictedQueries = restrictedQueries;
 
-    if (!selectedType || Object.keys(updateData).length === 0) {
-      setError('Please select a type and add at least one item');
+    if (Object.keys(updateData).length === 0) {
+      setError('Please add at least one item');
       return;
     }
 
@@ -151,8 +192,10 @@ const AddContentModal: React.FC<AddContentModalProps> = ({ onClose, onAdd }) => 
       setAudios([]);
       setVideos([]);
       setImages([]);
+      setRestrictedQueries([]);
       setUrlInput('');
       setTextInput('');
+      setRestrictedQueryInput('');
       setEditingIndex(null);
       setEditingValue('');
       setSelectedType(null);
@@ -200,7 +243,7 @@ const AddContentModal: React.FC<AddContentModalProps> = ({ onClose, onAdd }) => 
               )}
 
             {!selectedType && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <button
                   type="button"
                   className="border border-gray-200 rounded-md p-4 hover:border-primary hover:shadow-sm flex flex-col items-center gap-3"
@@ -237,6 +280,18 @@ const AddContentModal: React.FC<AddContentModalProps> = ({ onClose, onAdd }) => 
                     <p className="text-xs text-gray-500">Paste or type text entries</p>
                   </div>
                 </button>
+                <button
+                  type="button"
+                  className="border border-gray-200 rounded-md p-4 hover:border-primary hover:shadow-sm flex flex-col items-center gap-3"
+                  onClick={() => setSelectedType('restricted')}
+                  disabled={loading}
+                >
+                  <FileText className="text-primary" size={28} />
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-gray-800">Restricted Queries</p>
+                    <p className="text-xs text-gray-500">Non-indexing restricted queries</p>
+                  </div>
+                </button>
                 </div>
               )}
 
@@ -266,136 +321,65 @@ const AddContentModal: React.FC<AddContentModalProps> = ({ onClose, onAdd }) => 
                       type="file"
                       multiple
                       accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
-                      onChange={(e) => handleFileChange(e, setFiles)}
+                      onChange={(e) => {
+                        const selectedFiles = Array.from(e.target.files || []);
+                        const newFiles = selectedFiles.map(file => ({ file, progress: 0 }));
+                        setFiles(prev => [...prev, ...newFiles]);
+                        // Reset input to allow selecting the same file again
+                        e.target.value = '';
+                      }}
                       className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-sm file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary/90"
                       disabled={loading}
                     />
-                    {files.length > 0 && (
-                      <div className="mt-2 space-y-2">
-                        {files.map((fileWithProgress, i) => (
-                          <div key={i} className="bg-gray-50 rounded-md p-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm text-gray-700 truncate flex-1">{fileWithProgress.file.name}</span>
-                              <IconButton
-                                icon={Trash2}
-                                onClick={() => removeFile(i, files, setFiles)}
-                                variant="danger"
-                                size="sm"
-                              />
-                            </div>
-                            {uploading && (
-                              <ProgressBar
-                                progress={fileWithProgress.progress}
-                                fileName={fileWithProgress.file.name}
-                              />
-                            )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Images</label>
               <input
                 type="file"
                 multiple
                       accept="image/*"
-                      onChange={(e) => handleFileChange(e, setImages)}
+                      onChange={(e) => {
+                        const selectedFiles = Array.from(e.target.files || []);
+                        const newFiles = selectedFiles.map(file => ({ file, progress: 0 }));
+                        setImages(prev => [...prev, ...newFiles]);
+                        e.target.value = '';
+                      }}
                       className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-sm file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary/90"
                       disabled={loading}
                     />
-                    {images.length > 0 && (
-                      <div className="mt-2 space-y-2">
-                        {images.map((fileWithProgress, i) => (
-                          <div key={i} className="bg-gray-50 rounded-md p-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm text-gray-700 truncate flex-1">{fileWithProgress.file.name}</span>
-                              <IconButton
-                                icon={Trash2}
-                                onClick={() => removeFile(i, images, setImages)}
-                                variant="danger"
-                                size="sm"
-                              />
-                            </div>
-                            {uploading && (
-                              <ProgressBar
-                                progress={fileWithProgress.progress}
-                                fileName={fileWithProgress.file.name}
-                              />
-                            )}
-                          </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Videos</label>
               <input
                 type="file"
                 multiple
                 accept="video/*"
-                      onChange={(e) => handleFileChange(e, setVideos)}
+                      onChange={(e) => {
+                        const selectedFiles = Array.from(e.target.files || []);
+                        const newFiles = selectedFiles.map(file => ({ file, progress: 0 }));
+                        setVideos(prev => [...prev, ...newFiles]);
+                        e.target.value = '';
+                      }}
                       className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-sm file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary/90"
                       disabled={loading}
               />
-              {videos.length > 0 && (
-                      <div className="mt-2 space-y-2">
-                        {videos.map((fileWithProgress, i) => (
-                          <div key={i} className="bg-gray-50 rounded-md p-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm text-gray-700 truncate flex-1">{fileWithProgress.file.name}</span>
-                              <IconButton
-                                icon={Trash2}
-                                onClick={() => removeFile(i, videos, setVideos)}
-                                variant="danger"
-                                size="sm"
-                              />
-                            </div>
-                            {uploading && (
-                              <ProgressBar
-                                progress={fileWithProgress.progress}
-                                fileName={fileWithProgress.file.name}
-                              />
-                            )}
-                          </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Audios</label>
               <input
                 type="file"
                 multiple
                       accept="audio/*"
-                      onChange={(e) => handleFileChange(e, setAudios)}
+                      onChange={(e) => {
+                        const selectedFiles = Array.from(e.target.files || []);
+                        const newFiles = selectedFiles.map(file => ({ file, progress: 0 }));
+                        setAudios(prev => [...prev, ...newFiles]);
+                        e.target.value = '';
+                      }}
                       className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-sm file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary/90"
                       disabled={loading}
                     />
-                    {audios.length > 0 && (
-                      <div className="mt-2 space-y-2">
-                        {audios.map((fileWithProgress, i) => (
-                          <div key={i} className="bg-gray-50 rounded-md p-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm text-gray-700 truncate flex-1">{fileWithProgress.file.name}</span>
-                              <IconButton
-                                icon={Trash2}
-                                onClick={() => removeFile(i, audios, setAudios)}
-                                variant="danger"
-                                size="sm"
-                              />
-                            </div>
-                            {uploading && (
-                              <ProgressBar
-                                progress={fileWithProgress.progress}
-                                fileName={fileWithProgress.file.name}
-                              />
-                            )}
-                          </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
           </div>
               </div>
             )}
@@ -420,10 +404,10 @@ const AddContentModal: React.FC<AddContentModalProps> = ({ onClose, onAdd }) => 
                     <label className="block text-sm font-medium text-gray-700 mb-1">Depth</label>
                     <Input
                       type="number"
-                      min={1}
+                      min={0}
                       max={5}
                       value={urlDepth.toString()}
-                      onChange={(e) => setUrlDepth(parseInt(e.target.value) || 1)}
+                      onChange={(e) => setUrlDepth(parseInt(e.target.value) || 0)}
                       disabled={loading}
                     />
                   </div>
@@ -433,25 +417,6 @@ const AddContentModal: React.FC<AddContentModalProps> = ({ onClose, onAdd }) => 
                     </Button>
                   </div>
                 </div>
-                {urls.length > 0 && (
-                  <div className="space-y-2">
-                    {urls.map((u, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-sm bg-gray-50 px-3 py-2 rounded">
-                        <div className="flex items-center gap-2">
-                          <LinkIcon size={16} className="text-primary" />
-                          <span className="truncate">{u.url}</span>
-                          <span className="text-xs text-gray-500">Depth: {u.depth}</span>
-                        </div>
-                        <IconButton
-                          icon={Trash2}
-                          variant="ghost"
-                          onClick={() => handleRemoveUrl(idx)}
-                          tooltip="Remove"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 
@@ -489,12 +454,154 @@ const AddContentModal: React.FC<AddContentModalProps> = ({ onClose, onAdd }) => 
                     <p className="text-xs text-gray-500">Add multiple text entries, edit any entry inline.</p>
                   </div>
                 </div>
-                {texts.length > 0 && (
-                  <div className="space-y-2">
-                    {texts.map((t, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-sm bg-gray-50 px-3 py-2 rounded">
-                        <span className="truncate">{t}</span>
-                        <div className="flex items-center gap-2">
+              </div>
+            )}
+
+            {selectedType === 'restricted' && (
+              <div className="space-y-4">
+                <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+                  <FileText size={18} className="text-primary" /> Restricted Queries
+                </h3>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 mb-4">
+                  <p className="text-sm text-yellow-800">
+                    <strong>Note:</strong> Restricted queries are non-indexing. They will appear in the content table with "Non-indexing" status and will not be processed for vector search.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <Input
+                    type="text"
+                    value={restrictedQueryInput}
+                    onChange={(e) => setRestrictedQueryInput(e.target.value)}
+                    placeholder="Enter a restricted query..."
+                    disabled={loading}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddRestrictedQuery();
+                      }
+                    }}
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button variant="secondary" onClick={handleAddRestrictedQuery} icon={Plus} iconPosition="left" disabled={loading}>
+                      Add Restricted Query
+                    </Button>
+                    <p className="text-xs text-gray-500">Add multiple restricted queries.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Unified Added Content Section - Always visible when there's content */}
+            {totalAddedItems > 0 && (
+              <div className="space-y-4 border-t border-gray-200 pt-4">
+                <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+                  <Database size={18} className="text-primary" /> Added Content ({totalAddedItems})
+                </h3>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {/* Files */}
+                  {files.map((fileWithProgress, idx) => (
+                    <div key={`file-${idx}`} className="bg-gray-50 rounded-md overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className={`p-1.5 rounded-md ${getTypeColor('file')} flex-shrink-0`}>
+                            {getTypeIcon('file')}
+                          </div>
+                          <span className="truncate text-gray-700 text-sm">{fileWithProgress.file.name}</span>
+                          {uploading && (
+                            <span className="text-xs text-gray-500 ml-2 flex-shrink-0">{fileWithProgress.progress}%</span>
+                          )}
+                        </div>
+                        <IconButton
+                          icon={Trash2}
+                          variant="ghost"
+                          onClick={() => removeFile(idx, files, setFiles)}
+                          tooltip="Remove"
+                          size="sm"
+                          disabled={loading}
+                        />
+                      </div>
+                      {uploading && (
+                        <div className="px-3 pb-2">
+                          <ProgressBar
+                            progress={fileWithProgress.progress}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* URLs */}
+                  {urls.map((u, idx) => (
+                    <div key={`url-${idx}`} className="flex items-center justify-between text-sm bg-gray-50 px-3 py-2 rounded">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className={`p-1.5 rounded-md ${getTypeColor('url')} flex-shrink-0`}>
+                          {getTypeIcon('url')}
+                        </div>
+                        <span className="truncate text-gray-700">{u.url}</span>
+                        <span className="text-xs text-gray-500 ml-2 flex-shrink-0">Depth: {u.depth}</span>
+                      </div>
+                      <IconButton
+                        icon={Trash2}
+                        variant="ghost"
+                        onClick={() => handleRemoveUrl(idx)}
+                        tooltip="Remove"
+                        size="sm"
+                      />
+                    </div>
+                  ))}
+
+                  {/* Texts */}
+                  {texts.map((t, idx) => (
+                    <div key={`text-${idx}`} className="flex items-center justify-between text-sm bg-gray-50 px-3 py-2 rounded">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className={`p-1.5 rounded-md ${getTypeColor('text')} flex-shrink-0`}>
+                          {getTypeIcon('text')}
+                        </div>
+                        {editingIndex === idx ? (
+                          <div className="flex-1 flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={editingValue}
+                              onChange={(e) => setEditingValue(e.target.value)}
+                              className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter') {
+                                  saveEditText();
+                                } else if (e.key === 'Escape') {
+                                  setEditingIndex(null);
+                                  setEditingValue('');
+                                }
+                              }}
+                              autoFocus
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={saveEditText}
+                              disabled={loading}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setEditingIndex(null);
+                                setEditingValue('');
+                              }}
+                              disabled={loading}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="truncate text-gray-700">{t}</span>
+                        )}
+                      </div>
+                      {editingIndex !== idx && (
+                        <div className="flex items-center gap-1">
                           <Button
                             type="button"
                             variant="ghost"
@@ -509,12 +616,131 @@ const AddContentModal: React.FC<AddContentModalProps> = ({ onClose, onAdd }) => 
                             variant="ghost"
                             onClick={() => handleRemoveText(idx)}
                             tooltip="Remove"
+                            size="sm"
                           />
                         </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Audios */}
+                  {audios.map((audioWithProgress, idx) => (
+                    <div key={`audio-${idx}`} className="bg-gray-50 rounded-md overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className={`p-1.5 rounded-md ${getTypeColor('audio')} flex-shrink-0`}>
+                            {getTypeIcon('audio')}
+                          </div>
+                          <span className="truncate text-gray-700 text-sm">{audioWithProgress.file.name}</span>
+                          {uploading && (
+                            <span className="text-xs text-gray-500 ml-2 flex-shrink-0">{audioWithProgress.progress}%</span>
+                          )}
+                        </div>
+                        <IconButton
+                          icon={Trash2}
+                          variant="ghost"
+                          onClick={() => removeFile(idx, audios, setAudios)}
+                          tooltip="Remove"
+                          size="sm"
+                          disabled={loading}
+                        />
                       </div>
-                    ))}
-                  </div>
-                )}
+                      {uploading && (
+                        <div className="px-3 pb-2">
+                          <ProgressBar
+                            progress={audioWithProgress.progress}
+                            fileName={audioWithProgress.file.name}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Videos */}
+                  {videos.map((videoWithProgress, idx) => (
+                    <div key={`video-${idx}`} className="bg-gray-50 rounded-md overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className={`p-1.5 rounded-md ${getTypeColor('video')} flex-shrink-0`}>
+                            {getTypeIcon('video')}
+                          </div>
+                          <span className="truncate text-gray-700 text-sm">{videoWithProgress.file.name}</span>
+                          {uploading && (
+                            <span className="text-xs text-gray-500 ml-2 flex-shrink-0">{videoWithProgress.progress}%</span>
+                          )}
+                        </div>
+                        <IconButton
+                          icon={Trash2}
+                          variant="ghost"
+                          onClick={() => removeFile(idx, videos, setVideos)}
+                          tooltip="Remove"
+                          size="sm"
+                          disabled={loading}
+                        />
+                      </div>
+                      {uploading && (
+                        <div className="px-3 pb-2">
+                          <ProgressBar
+                            progress={videoWithProgress.progress}
+                            fileName={videoWithProgress.file.name}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Images */}
+                  {images.map((imageWithProgress, idx) => (
+                    <div key={`image-${idx}`} className="bg-gray-50 rounded-md overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className={`p-1.5 rounded-md ${getTypeColor('image')} flex-shrink-0`}>
+                            {getTypeIcon('image')}
+                          </div>
+                          <span className="truncate text-gray-700 text-sm">{imageWithProgress.file.name}</span>
+                          {uploading && (
+                            <span className="text-xs text-gray-500 ml-2 flex-shrink-0">{imageWithProgress.progress}%</span>
+                          )}
+                        </div>
+                        <IconButton
+                          icon={Trash2}
+                          variant="ghost"
+                          onClick={() => removeFile(idx, images, setImages)}
+                          tooltip="Remove"
+                          size="sm"
+                          disabled={loading}
+                        />
+                      </div>
+                      {uploading && (
+                        <div className="px-3 pb-2">
+                          <ProgressBar
+                            progress={imageWithProgress.progress}
+                            fileName={imageWithProgress.file.name}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Restricted Queries */}
+                  {restrictedQueries.map((query, idx) => (
+                    <div key={`restricted-${idx}`} className="flex items-center justify-between text-sm bg-gray-50 px-3 py-2 rounded">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className={`p-1.5 rounded-md ${getTypeColor('restricted_query')} flex-shrink-0`}>
+                          {getTypeIcon('restricted_query')}
+                        </div>
+                        <span className="truncate text-gray-700">{query}</span>
+                      </div>
+                      <IconButton
+                        icon={Trash2}
+                        variant="ghost"
+                        onClick={() => handleRemoveRestrictedQuery(idx)}
+                        tooltip="Remove"
+                        size="sm"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -522,7 +748,7 @@ const AddContentModal: React.FC<AddContentModalProps> = ({ onClose, onAdd }) => 
               <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>
               Cancel
               </Button>
-              <Button type="submit" variant="primary" icon={UploadCloud} iconPosition="left" disabled={loading || !selectedType}>
+              <Button type="submit" variant="primary" icon={UploadCloud} iconPosition="left" disabled={loading || totalAddedItems === 0}>
                 {loading ? (
                   <div className="flex items-center gap-2">
                     <Spinner size="sm" color="white" />

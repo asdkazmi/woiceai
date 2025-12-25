@@ -87,6 +87,12 @@ export class ChatAIService {
       throw new Error('Knowledge base not found');
     }
 
+    // Check for duplicate name within the same knowledge base
+    const existingChatAI = await ChatAI.findByNameAndKnowledgeBase(data.name.trim(), knowledgeBaseId, userId);
+    if (existingChatAI) {
+      throw new Error('A Chat AI with this name already exists in this knowledge base');
+    }
+
     const chatAI = await ChatAI.create({
       knowledgeBaseId,
       userId,

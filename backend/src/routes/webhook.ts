@@ -85,6 +85,7 @@ const handleSNSWebhook = async (req: Request, res: Response) => {
       const knowledgebaseID = attributes['KNOWLEDGEBASE.ID']?.Value 
         ? parseInt(attributes['KNOWLEDGEBASE.ID'].Value) 
         : null;
+      const action = attributes['KNOWLEDGEBASE.ACTION']?.Value || null;
       const content = attributes['KNOWLEDGEBASE.CONTENT']?.Value || null;
       const contentType = attributes['KNOWLEDGEBASE.CONTENT_TYPE']?.Value || null;
       const uniqueId = attributes['KNOWLEDGEBASE.UNIQUE_ID']?.Value || null;
@@ -95,6 +96,7 @@ const handleSNSWebhook = async (req: Request, res: Response) => {
       const transcription = attributes['KNOWLEDGEBASE.TRANSCRIPTION']?.Value || null;
       const explanation = attributes['KNOWLEDGEBASE.EXPLANATION']?.Value || null;
       const sceneExplanation = attributes['KNOWLEDGEBASE.SCENE_EXPLANATION']?.Value || null;
+      const scrappingStatus = attributes['KNOWLEDGEBASE.SCRAPPING_STATUS']?.Value || null;
       const text = attributes['KNOWLEDGEBASE.TEXT']?.Value || null;
       const treeDocumentId = attributes['KNOWLEDGEBASE.TREE_DOCUMENT_ID']?.Value || null;
 
@@ -105,7 +107,47 @@ const handleSNSWebhook = async (req: Request, res: Response) => {
         });
       }
 
-      // Find the knowledge base
+      // Handle DELETE_KNOWLEDGEBASE action first (before content lookup)
+      if (action === 'DELETE_KNOWLEDGEBASE') {
+        // Find the knowledge base
+        const knowledgebase = await KnowledgeBase.findById(knowledgebaseID, false);
+
+        if (!knowledgebase) {
+          console.warn('SNS Notification: Knowledgebase not found for deletion:', knowledgebaseID);
+          return res.status(404).json({
+            message: 'Knowledgebase not found',
+          });
+        }
+
+        // When status is 'completed' (case-insensitive), actually delete the knowledge base
+        if (status && status.toLowerCase() === 'completed') {
+          const { KnowledgeBaseService } = await import('../services/knowledgeBaseService');
+          const deleted = await KnowledgeBaseService.completeDeletion(knowledgebaseID);
+          
+          if (deleted) {
+            console.log('SNS Notification: Knowledgebase deleted successfully:', knowledgebaseID);
+            return res.json({
+              message: 'Knowledgebase deletion completed successfully',
+            });
+          } else {
+            console.warn('SNS Notification: Failed to complete knowledgebase deletion:', knowledgebaseID);
+            return res.status(400).json({
+              message: 'Failed to complete knowledgebase deletion',
+            });
+          }
+        } else {
+          // For other statuses (like 'processing'), just log
+          console.log('SNS Notification: Knowledgebase deletion in progress:', {
+            knowledgebaseID,
+            status,
+          });
+          return res.json({
+            message: 'Deletion status updated',
+          });
+        }
+      }
+
+      // Find the knowledge base for content updates
       const knowledgebase = await KnowledgeBase.findById(knowledgebaseID, false);
 
       if (!knowledgebase) {
@@ -151,8 +193,18 @@ const handleSNSWebhook = async (req: Request, res: Response) => {
 
       // Update the content with new status and data
       const updates: any = {};
-      if (status) {
+      // Always update status if provided (even if scrappingStatus is also present)
+      // STATUS updates should work independently of SCRAPPING_STATUS
+      // STATUS can be: 'pending', 'queued', 'processing', 'completed', 'failed'
+      // Use case-insensitive comparison for status checks
+      const statusLower = status ? status.toLowerCase() : '';
+      
+      if (status !== null && status !== undefined && status !== '') {
         updates.status = status;
+        // Clear scrappingStatus when status becomes 'completed' or 'failed' since scraping is done
+        if (statusLower === 'completed' || statusLower === 'failed') {
+          updates.scrappingStatus = null;
+        }
       }
       if (transcription !== null) {
         updates.transcription = transcription;
@@ -162,6 +214,16 @@ const handleSNSWebhook = async (req: Request, res: Response) => {
       }
       if (sceneExplanation !== null) {
         updates.sceneExplanation = sceneExplanation;
+      }
+      // SCRAPPING_STATUS is only for URLs with depth > 0, and should be updated independently
+      // It provides real-time progress (e.g., "5/10") while STATUS tracks overall state
+      // Only update scrappingStatus if status is not 'completed' or 'failed' (to avoid overwriting the clear above)
+      if (scrappingStatus !== null && scrappingStatus !== undefined) {
+        // Only set scrappingStatus if we're not in a final state
+        // This allows STATUS='completed' to clear it, but STATUS='processing' can still update it
+        if (statusLower !== 'completed' && statusLower !== 'failed') {
+          updates.scrappingStatus = scrappingStatus;
+        }
       }
       if (text !== null) {
         updates.textContent = text;
@@ -181,8 +243,10 @@ const handleSNSWebhook = async (req: Request, res: Response) => {
         content,
         contentType,
         status,
+        scrappingStatus,
         treeDocumentId,
         creditsConsumed,
+        updates: Object.keys(updates),
       });
 
       // Check if all content is completed

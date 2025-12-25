@@ -9,6 +9,7 @@ import connectorRoutes from './routes/connector';
 import webhookRoutes from './routes/webhook';
 import chatAIRoutes from './routes/chatAI';
 import urlTreeRoutes from './routes/urlTree';
+import restrictedQueryRoutes from './routes/restrictedQuery';
 import { createDatabaseIfNotExists, testConnection } from './config/database';
 import { createUsersTable } from './migrations/createUsersTable';
 import { createKnowledgeBasesTable } from './migrations/createKnowledgeBasesTable';
@@ -22,6 +23,9 @@ import { createChatAisTable } from './migrations/createChatAisTable';
 import { createChatAiMessagesTable } from './migrations/createChatAiMessagesTable';
 import { addIsPublishedToChatAisTable } from './migrations/addIsPublishedToChatAisTable';
 import { addTreeDocumentIdToKnowledgeBaseContentsTable } from './migrations/addTreeDocumentIdToKnowledgeBaseContentsTable';
+import { addScrappingStatusToKnowledgeBaseContentsTable } from './migrations/addScrappingStatusToKnowledgeBaseContentsTable';
+import { addDeletingStatusToKnowledgeBasesTable } from './migrations/addDeletingStatusToKnowledgeBasesTable';
+import { addRestrictedQuerySupport } from './migrations/addRestrictedQuerySupport';
 import { seedConnectors } from './scripts/seedConnectors';
 import { connectMongoDB } from './services/mongodbService';
 
@@ -113,6 +117,9 @@ const initializeDatabase = async (): Promise<void> => {
     await createChatAiMessagesTable();
     await addIsPublishedToChatAisTable();
     await addTreeDocumentIdToKnowledgeBaseContentsTable();
+    await addScrappingStatusToKnowledgeBaseContentsTable();
+    await addDeletingStatusToKnowledgeBasesTable();
+    await addRestrictedQuerySupport();
     // Seed default connectors
     await seedConnectors();
     
@@ -172,6 +179,7 @@ app.use('/api/knowledge-base', knowledgeBaseRoutes);
 app.use('/api/connectors', connectorRoutes);
 app.use('/api/chat-ai', chatAIRoutes);
 app.use('/api/url-tree', urlTreeRoutes);
+app.use('/api/restricted-queries', restrictedQueryRoutes);
 // Webhook routes - match Laravel pattern for SNS subscription
 app.use('/knowledgebase', webhookRoutes);
 app.use('/api/webhook', webhookRoutes); // Also keep API version for flexibility

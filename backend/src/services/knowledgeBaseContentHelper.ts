@@ -93,6 +93,18 @@ export class KnowledgeBaseContentHelper {
   }
 
   /**
+   * Prepare restricted query type attributes
+   */
+  static prepareRestrictedQueryTypeAttributes(queries: string[]): PreparedContent[] {
+    return queries.map((query) => ({
+      content: query.trim(),
+      textContent: query.trim(),
+      type: 'restricted_query',
+      status: 'non-indexing',
+    }));
+  }
+
+  /**
    * Merge all attribute arrays
    */
   static mergeAttributes(...attributeArrays: PreparedContent[][]): PreparedContent[] {

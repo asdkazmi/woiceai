@@ -286,7 +286,7 @@ const ConnectorsList: React.FC = () => {
       {/* API Key Modal */}
       {showApiKeyModal && selectedConnector && (
         <div
-          className="hs-overlay fixed inset-0 z-[60] overflow-x-hidden overflow-y-auto bg-black bg-opacity-50"
+          className="fixed inset-0 z-[60] overflow-x-hidden overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4"
           onClick={() => {
             setShowApiKeyModal(false);
             setApiKey('');
@@ -294,8 +294,7 @@ const ConnectorsList: React.FC = () => {
             setShowApiKey(false);
           }}
         >
-          <div className="hs-overlay-open:mt-7 hs-overlay-open:opacity-100 hs-overlay-open:duration-500 mt-0 opacity-0 ease-out transition-all sm:max-w-lg sm:w-full m-3 sm:m-auto">
-            <div className="bg-white border border-gray-200 rounded-md shadow-lg" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white border border-gray-200 rounded-md shadow-lg w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center p-4 border-b border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-800">
                   {isConnectorActive(selectedConnector)
@@ -364,7 +363,6 @@ const ConnectorsList: React.FC = () => {
                 </Button>
               </div>
             </div>
-          </div>
         </div>
       )}
 
