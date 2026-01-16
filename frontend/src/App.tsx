@@ -6,7 +6,11 @@ import DashboardPage from './components/DashboardPage';
 import KnowledgeBaseList from './components/KnowledgeBaseList';
 import ConnectorsList from './components/ConnectorsList';
 import ChatAIPage from './components/ChatAIPage';
+import AgentsList from './components/AgentsList';
+import AgentBuilder from './components/AgentBuilder';
+import AgentChat from './components/AgentChat';
 import AuthCallback from './components/AuthCallback';
+import ErrorBoundary from './components/ErrorBoundary';
 import { authService } from './services/authService';
 import './App.css';
 import { IStaticMethods } from 'preline/preline';
@@ -99,6 +103,40 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <ConnectorsList />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/agents"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <AgentsList />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/agents/:id"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <ErrorBoundary>
+                    <AgentBuilder />
+                  </ErrorBoundary>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/agents/:id/chat"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <ErrorBoundary>
+                    <AgentChat />
+                  </ErrorBoundary>
                 </Layout>
               </ProtectedRoute>
             }

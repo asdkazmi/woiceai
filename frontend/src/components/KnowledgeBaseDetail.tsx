@@ -590,7 +590,7 @@ const KnowledgeBaseDetail: React.FC<KnowledgeBaseDetailProps> = ({
                     const scale = displayed.length > 1 ? getItemScale(index, displayed.length) : 1;
                     return (
                       <div 
-                        key={item.type} 
+                        key={`${item.type}-${index}`} 
                         className="flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded-md transition-transform duration-500 ease-in-out text-xs"
                         style={{ 
                           transform: `scale(${scale})`,

@@ -24,6 +24,7 @@ export interface ChatAI {
   modelName: string;
   settings: ChatAISettings;
   isPublished?: boolean;
+  knowledgeBaseName?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -132,6 +133,11 @@ export const chatAIService = {
   async togglePublish(id: number): Promise<ChatAI> {
     const response = await api.patch<ChatAIResponse>(`/chat-ai/${id}/toggle-publish`);
     return response.data.data.chatAI;
+  },
+
+  async getPublished(): Promise<ChatAI[]> {
+    const response = await api.get<ChatAIListResponse>('/chat-ai/published');
+    return response.data.data.chatAIs;
   },
 };
 

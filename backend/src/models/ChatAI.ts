@@ -160,6 +160,33 @@ export class ChatAI {
     return result.affectedRows > 0;
   }
 
+  static async findPublishedByUserId(userId: number): Promise<(IChatAI & { knowledgeBaseName?: string })[]> {
+    const [rows]: any = await pool.execute(
+      `SELECT 
+        ca.id, 
+        ca.knowledge_base_id as knowledgeBaseId, 
+        ca.user_id as userId, 
+        ca.name, 
+        ca.llm_name as llmName, 
+        ca.model_name as modelName, 
+        ca.settings, 
+        ca.is_published as isPublished,
+        ca.created_at as createdAt, 
+        ca.updated_at as updatedAt,
+        kb.name as knowledgeBaseName
+       FROM chat_ais ca
+       INNER JOIN knowledge_bases kb ON ca.knowledge_base_id = kb.id
+       WHERE ca.user_id = ? AND ca.is_published = 1
+       ORDER BY ca.created_at DESC`,
+      [userId]
+    );
+
+    return rows.map((row: any) => ({
+      ...this.mapRowToChatAI(row),
+      knowledgeBaseName: row.knowledgeBaseName,
+    }));
+  }
+
   private static mapRowToChatAI(row: any): IChatAI {
     let settings: IChatAISettings = {};
     try {

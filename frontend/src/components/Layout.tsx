@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { authService, User } from '../services/authService';
-import { LayoutDashboard, Database, Plug, User as UserIcon, LogOut } from 'lucide-react';
+import { LayoutDashboard, Database, Plug, User as UserIcon, LogOut, Bot } from 'lucide-react';
 import Spinner from './ui/Spinner';
 import { IStaticMethods } from 'preline/preline';
 
@@ -11,7 +11,7 @@ declare global {
   }
 }
 
-type MenuOption = 'dashboard' | 'knowledge-bases' | 'connectors';
+type MenuOption = 'dashboard' | 'knowledge-bases' | 'connectors' | 'agents';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -29,6 +29,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     if (path === '/dashboard' || path === '/dashboard/') return 'dashboard';
     if (path.includes('/knowledge-bases')) return 'knowledge-bases';
     if (path.includes('/connectors')) return 'connectors';
+    if (path.includes('/agents')) return 'agents';
     return 'dashboard';
   };
 
@@ -114,6 +115,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { id: 'knowledge-bases', label: 'Knowledge Bases', path: '/knowledge-bases', icon: Database },
     { id: 'connectors', label: 'Connectors', path: '/connectors', icon: Plug },
+    { id: 'agents', label: 'Agents', path: '/agents', icon: Bot },
   ];
 
   const handleMenuClick = (option: MenuOption, path: string) => {
@@ -158,7 +160,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           {/* Header */}
           <header className="py-4 px-2 flex justify-between items-center gap-x-2">
             <a
-              className="flex-none font-semibold text-xl text-black focus:outline-none focus:opacity-80 hs-overlay-minified:hidden"
+              className="flex-none focus:outline-none focus:opacity-80 hs-overlay-minified:hidden"
               href="/dashboard"
               onClick={(e) => {
                 e.preventDefault();
@@ -166,7 +168,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               }}
               aria-label="Brand"
             >
-              Woice AI
+              <img src="/woice.ai.png" alt="Woice AI" className="h-8 w-auto" />
+            </a>
+            <a
+              className="hidden hs-overlay-minified:flex flex-none focus:outline-none focus:opacity-80 justify-center items-center"
+              href="/dashboard"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate('/dashboard');
+              }}
+              aria-label="Brand"
+            >
+              <img src="/woice.ai-2.png" alt="Woice AI" className="h-8 w-8" />
             </a>
 
             <div className="lg:hidden">

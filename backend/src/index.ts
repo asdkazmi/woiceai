@@ -1,5 +1,5 @@
 import express from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import dotenv from 'dotenv';
 import session from 'express-session';
 import passport from './config/googleAuth';
@@ -8,6 +8,7 @@ import knowledgeBaseRoutes from './routes/knowledgeBase';
 import connectorRoutes from './routes/connector';
 import webhookRoutes from './routes/webhook';
 import chatAIRoutes from './routes/chatAI';
+import agentRoutes from './routes/agents';
 import urlTreeRoutes from './routes/urlTree';
 import restrictedQueryRoutes from './routes/restrictedQuery';
 import { createDatabaseIfNotExists, testConnection } from './config/database';
@@ -26,6 +27,9 @@ import { addTreeDocumentIdToKnowledgeBaseContentsTable } from './migrations/addT
 import { addScrappingStatusToKnowledgeBaseContentsTable } from './migrations/addScrappingStatusToKnowledgeBaseContentsTable';
 import { addDeletingStatusToKnowledgeBasesTable } from './migrations/addDeletingStatusToKnowledgeBasesTable';
 import { addRestrictedQuerySupport } from './migrations/addRestrictedQuerySupport';
+import { createAgentsTable } from './migrations/createAgentsTable';
+import { createAgentExecutionsTable } from './migrations/createAgentExecutionsTable';
+import { createAgentChatMessagesTable } from './migrations/createAgentChatMessagesTable';
 import { seedConnectors } from './scripts/seedConnectors';
 import { connectMongoDB } from './services/mongodbService';
 
@@ -34,35 +38,25 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS Configuration - Allow all origins in development
-const corsOptions = {
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    // In development, allow all origins
-    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-      callback(null, true);
-    } else {
-      // In production, check against allowed origins
-      const allowedOrigins = [
-        process.env.FRONTEND_URL || 'http://localhost:3000',
-        'http://localhost:3000',
-        'http://127.0.0.1:3000'
-      ];
-      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    }
+// CORS Configuration - allow configurable frontend origins and handle preflight
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // Allow server-to-server or curl
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) return callback(null, true);
+    console.warn(`CORS blocked for origin: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Authorization'],
-  optionsSuccessStatus: 200
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
 };
 
-// Middleware - CORS must be before other middleware
-app.use(cors(corsOptions));
+app.use(cors(corsOptions)); // Handles preflight via middleware (no need for explicit '*' route)
 
 // Body parsing middleware - handle both JSON and text/plain (SNS sends as text/plain)
 app.use(express.json({ limit: '10mb' }));
@@ -120,6 +114,9 @@ const initializeDatabase = async (): Promise<void> => {
     await addScrappingStatusToKnowledgeBaseContentsTable();
     await addDeletingStatusToKnowledgeBasesTable();
     await addRestrictedQuerySupport();
+    await createAgentsTable();
+    await createAgentExecutionsTable();
+    await createAgentChatMessagesTable();
     // Seed default connectors
     await seedConnectors();
     
@@ -178,6 +175,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/knowledge-base', knowledgeBaseRoutes);
 app.use('/api/connectors', connectorRoutes);
 app.use('/api/chat-ai', chatAIRoutes);
+app.use('/api/agents', agentRoutes);
 app.use('/api/url-tree', urlTreeRoutes);
 app.use('/api/restricted-queries', restrictedQueryRoutes);
 // Webhook routes - match Laravel pattern for SNS subscription

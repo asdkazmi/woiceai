@@ -3,8 +3,35 @@ import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { ChatAIService } from '../services/chatAIService';
 import { ChatAIMessage } from '../models/ChatAIMessage';
+import { IChatAI, ChatAI } from '../models/ChatAI';
 
 const router = express.Router();
+
+// @route   GET /api/chat-ai/published
+// @desc    Get all published Chat AIs with their knowledge base names
+// @access  Private
+// NOTE: This route must come before /:id route to avoid route conflicts
+router.get('/published', authenticate, async (req: Request, res: Response) => {
+  try {
+    const user = (req as AuthRequest).user!;
+    
+    // Get all published Chat AIs for the user with knowledge base names
+    const chatAIs = await ChatAI.findPublishedByUserId(user.id!);
+
+    res.json({
+      message: 'Published Chat AIs fetched successfully',
+      data: {
+        chatAIs,
+      },
+    });
+  } catch (error: any) {
+    console.error('Get published Chat AIs error:', error);
+    res.status(500).json({
+      message: error.message || 'Server error',
+      ...(process.env.NODE_ENV === 'development' && { error: error.message }),
+    });
+  }
+});
 
 // @route   GET /api/chat-ai/knowledge-base/:knowledgeBaseId
 // @desc    Get all chat AIs for a knowledge base
