@@ -246,6 +246,9 @@ const AgentBuilderInner: React.FC = () => {
   const [sourceNodeForConnection, setSourceNodeForConnection] = useState<Node | null>(null);
   const [targetNodeForInsertion, setTargetNodeForInsertion] = useState<string | null>(null);
   const [edgeIdForInsertion, setEdgeIdForInsertion] = useState<string | null>(null);
+  const [showDeleteBranchModal, setShowDeleteBranchModal] = useState(false);
+  const [deleteBranchNodeId, setDeleteBranchNodeId] = useState<string | null>(null);
+  const [deleteBranchChoice, setDeleteBranchChoice] = useState<'true' | 'false' | null>(null);
   
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -656,6 +659,23 @@ const AgentBuilderInner: React.FC = () => {
       setError('Start node cannot be deleted');
       return;
     }
+
+    const nodeToDelete = nodes.find((node) => node.id === nodeId);
+    if (nodeToDelete?.type === 'ifElse') {
+      const trueEdge = edges.find(
+        (edge) => edge.source === nodeId && edge.sourceHandle === 'true'
+      );
+      const falseEdge = edges.find(
+        (edge) => edge.source === nodeId && edge.sourceHandle === 'false'
+      );
+
+      if (trueEdge && falseEdge) {
+        setDeleteBranchNodeId(nodeId);
+        setDeleteBranchChoice(null);
+        setShowDeleteBranchModal(true);
+        return;
+      }
+    }
     
     // Find edges connected to this node
     const incomingEdges = edges.filter((e) => e.target === nodeId);
@@ -707,6 +727,93 @@ const AgentBuilderInner: React.FC = () => {
     if (selectedNode?.id === nodeId) {
       setSelectedNode(null);
     }
+  };
+
+  const handleDeleteBranchConfirm = () => {
+    if (!deleteBranchNodeId || !deleteBranchChoice) return;
+
+    const nodeId = deleteBranchNodeId;
+    const trueEdge = edges.find(
+      (edge) => edge.source === nodeId && edge.sourceHandle === 'true'
+    );
+    const falseEdge = edges.find(
+      (edge) => edge.source === nodeId && edge.sourceHandle === 'false'
+    );
+    if (!trueEdge || !falseEdge) {
+      setShowDeleteBranchModal(false);
+      setDeleteBranchNodeId(null);
+      setDeleteBranchChoice(null);
+      return;
+    }
+
+    const keepEdge = deleteBranchChoice === 'true' ? trueEdge : falseEdge;
+    const removeEdge = deleteBranchChoice === 'true' ? falseEdge : trueEdge;
+
+    const getReachable = (startId: string) => {
+      const visited = new Set<string>();
+      const queue: string[] = [startId];
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (visited.has(current)) continue;
+        visited.add(current);
+        edges
+          .filter((edge) => edge.source === current)
+          .forEach((edge) => {
+            if (!visited.has(edge.target)) queue.push(edge.target);
+          });
+      }
+      return visited;
+    };
+
+    const removeReachable = getReachable(removeEdge.target);
+    const keepReachable = getReachable(keepEdge.target);
+    const nodesToRemove = new Set(
+      Array.from(removeReachable).filter((id) => !keepReachable.has(id))
+    );
+
+    const incomingEdges = edges.filter((edge) => edge.target === nodeId);
+
+    const newEdges: Edge[] = [];
+    edges.forEach((edge) => {
+      if (edge.source === nodeId || edge.target === nodeId) return;
+      if (nodesToRemove.has(edge.source) || nodesToRemove.has(edge.target)) return;
+      newEdges.push(edge);
+    });
+
+    incomingEdges.forEach((incomingEdge) => {
+      if (incomingEdge.source === keepEdge.target) return;
+      const edgeExists = newEdges.some(
+        (edge) =>
+          edge.source === incomingEdge.source &&
+          edge.target === keepEdge.target &&
+          edge.sourceHandle === incomingEdge.sourceHandle
+      );
+      if (!edgeExists) {
+        newEdges.push({
+          id: `edge-${incomingEdge.source}-${keepEdge.target}`,
+          source: incomingEdge.source,
+          target: keepEdge.target,
+          sourceHandle: incomingEdge.sourceHandle,
+          targetHandle: null,
+          type: 'addNode',
+        });
+      }
+    });
+
+    setNodes((nds) => {
+      const filtered = nds.filter(
+        (node) => node.id !== nodeId && !nodesToRemove.has(node.id)
+      );
+      return repositionNodesVertically(filtered, newEdges);
+    });
+    setEdges(newEdges);
+    if (selectedNode?.id === nodeId || nodesToRemove.has(selectedNode?.id || '')) {
+      setSelectedNode(null);
+    }
+
+    setShowDeleteBranchModal(false);
+    setDeleteBranchNodeId(null);
+    setDeleteBranchChoice(null);
   };
 
   const handleSave = async () => {
@@ -1340,6 +1447,69 @@ const AgentBuilderInner: React.FC = () => {
                   <span className="font-medium text-gray-800">{option.label}</span>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Branch Selection Modal */}
+      {showDeleteBranchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Delete If/Else Node</h3>
+              <button
+                onClick={() => {
+                  setShowDeleteBranchModal(false);
+                  setDeleteBranchNodeId(null);
+                  setDeleteBranchChoice(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Select which branch to keep. The other branch will be deleted.
+            </p>
+            <div className="space-y-3 mb-6">
+              <label className="flex items-center gap-3 border border-gray-200 rounded-md px-4 py-3 cursor-pointer hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="delete-branch"
+                  checked={deleteBranchChoice === 'true'}
+                  onChange={() => setDeleteBranchChoice('true')}
+                />
+                <span className="text-sm text-gray-700">Keep True branch</span>
+              </label>
+              <label className="flex items-center gap-3 border border-gray-200 rounded-md px-4 py-3 cursor-pointer hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="delete-branch"
+                  checked={deleteBranchChoice === 'false'}
+                  onChange={() => setDeleteBranchChoice('false')}
+                />
+                <span className="text-sm text-gray-700">Keep False branch</span>
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowDeleteBranchModal(false);
+                  setDeleteBranchNodeId(null);
+                  setDeleteBranchChoice(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleDeleteBranchConfirm}
+                disabled={!deleteBranchChoice}
+              >
+                Continue
+              </Button>
             </div>
           </div>
         </div>
