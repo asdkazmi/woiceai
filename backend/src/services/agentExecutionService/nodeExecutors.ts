@@ -45,7 +45,7 @@ export async function executeStartNode(
 }
 
 /**
- * Resolve variables in templates like {{user.input.latest}}, {{user.input.first}}, {{node[ID].user.message}}
+ * Resolve variables in templates like {{user.input.latest}}, {{user.input.first}}, {{node[ID].user.message}}, {{node[ID].output.text}}
  */
 function resolveVariables(
   template: string,
@@ -89,6 +89,29 @@ function resolveVariables(
     return input ? String(input.value) : '';
   });
 
+  // Resolve {{node[ID].output.text}} - output from specific node by numeric nodeId
+  const outputPattern = /\{\{node\[(\d+)\]\.output\.text\}\}/g;
+  result = result.replace(outputPattern, (match, numericNodeId) => {
+    const targetNodeId = parseInt(numericNodeId, 10);
+    const outputs = context?.nodeOutputs || {};
+
+    if (allNodes) {
+      const targetNode = allNodes.find((node: any) => {
+        const nodeId = node.data?.nodeId ?? node.nodeId;
+        return nodeId === targetNodeId;
+      });
+      if (targetNode && outputs[targetNode.id]?.text !== undefined) {
+        return String(outputs[targetNode.id].text);
+      }
+    }
+
+    if (outputs[String(targetNodeId)]?.text !== undefined) {
+      return String(outputs[String(targetNodeId)].text);
+    }
+
+    return '';
+  });
+
   return result;
 }
 
@@ -100,13 +123,25 @@ export async function executeChatAINode(
   context: NodeExecutionContext
 ): Promise<NodeExecutionResult> {
   const { nodeData, context: execContext, userInputs, allNodes } = context;
+  const sendOutput =
+    nodeData.sendOutput !== undefined
+      ? Boolean(nodeData.sendOutput)
+      : nodeData.data?.sendOutput !== undefined
+      ? Boolean(nodeData.data.sendOutput)
+      : true;
+  const waitForReply =
+    nodeData.waitForReply !== undefined
+      ? Boolean(nodeData.waitForReply)
+      : nodeData.data?.waitForReply !== undefined
+      ? Boolean(nodeData.data.waitForReply)
+      : false;
 
   // Check if we already have input for this node (user has responded after Chat AI reply)
   const existingInput = userInputs.find((ui) => ui.nodeId === context.nodeId);
 
   // If we have input, we've already sent the Chat AI response and received user input
   // So now we continue to the next node
-  if (existingInput) {
+  if (waitForReply && existingInput) {
     const nextNodeId = context.nodeData.outgoingNodeId || null;
     return {
       output: existingInput.value,
@@ -150,23 +185,44 @@ export async function executeChatAINode(
       history,
     });
 
-    // After Chat AI replies, we PAUSE and wait for user input
+    // Store Chat AI output for variable resolution: {{node[ID].output.text}}
+    if (!execContext.nodeOutputs) {
+      execContext.nodeOutputs = {};
+    }
+    execContext.nodeOutputs[context.nodeId] = {
+      text: response.content,
+    };
+
+    const messages = sendOutput
+      ? [
+          {
+            role: 'assistant' as const,
+            content: response.content,
+            references: response.references,
+            executionTime: response.executionTime,
+            delayTime: response.delayTime,
+            inputTokens: response.inputTokens,
+            outputTokens: response.outputTokens,
+            totalTokens: response.totalTokens,
+          },
+        ]
+      : [];
+
+    if (waitForReply) {
+      // After Chat AI replies, we PAUSE and wait for user input
+      return {
+        waitingForInput: true, // Pause workflow, wait for user input
+        output: response.content,
+        nextNodeId: context.nodeData.outgoingNodeId || null, // Still need nextNodeId for potential resume
+        messages,
+      };
+    }
+
+    // Continue immediately to next node
     return {
-      waitingForInput: true, // Pause workflow, wait for user input
       output: response.content,
-      nextNodeId: context.nodeData.outgoingNodeId || null, // Still need nextNodeId for potential resume
-      messages: [
-        {
-          role: 'assistant',
-          content: response.content,
-          references: response.references,
-          executionTime: response.executionTime,
-          delayTime: response.delayTime,
-          inputTokens: response.inputTokens,
-          outputTokens: response.outputTokens,
-          totalTokens: response.totalTokens,
-        },
-      ],
+      nextNodeId: context.nodeData.outgoingNodeId || null,
+      messages,
     };
   } catch (error: any) {
     throw new Error(`Chat AI execution failed: ${error.message}`);
@@ -180,40 +236,30 @@ export async function executeChatAINode(
 export async function executeIfElseNode(
   context: NodeExecutionContext
 ): Promise<NodeExecutionResult> {
-  const { nodeData, input, userInputs } = context;
+  const { nodeData, userInputs } = context;
 
   // Check if we already have input for this node (user has responded)
   const existingInput = userInputs.find((ui) => ui.nodeId === context.nodeId);
   
-  if (existingInput) {
-    // We have the result, continue to next node based on the result
-    const result = Boolean(existingInput.value);
-    const nextNodeId = result 
-      ? (context.nodeData.trueNodeId || null)
-      : (context.nodeData.falseNodeId || null);
-
+  if (!existingInput) {
     return {
-      output: result,
-      nextNodeId,
-      messages: [], // If/Else doesn't send messages
+      waitingForInput: true,
+      output: '',
+      messages: [],
     };
   }
 
-  // Evaluate condition
+  // Evaluate condition with the user-provided input
   const condition = nodeData.condition || nodeData.data?.condition || '';
   let result = false;
 
   try {
-    // Simple condition evaluation - can be enhanced later
-    // For now, just check if input is truthy
-    result = Boolean(input && String(input).trim() !== '');
+    const message = existingInput.value;
+    result = Boolean(message && String(message).trim() !== '');
   } catch (error) {
     result = false;
   }
 
-  // Store result in userInputs for variable resolution (as true/false)
-  // But we still need to pause for user input to confirm or continue
-  // Actually, If/Else shouldn't pause - it should just route based on condition
   const nextNodeId = result 
     ? (context.nodeData.trueNodeId || null)
     : (context.nodeData.falseNodeId || null);
@@ -221,7 +267,12 @@ export async function executeIfElseNode(
   return {
     output: result,
     nextNodeId,
-    messages: [], // If/Else doesn't send messages
+    messages: [
+      {
+        role: 'user',
+        content: String(existingInput.value),
+      },
+    ],
   };
 }
 
@@ -232,16 +283,44 @@ export async function executeIfElseNode(
 export async function executeIntentRecognitionNode(
   context: NodeExecutionContext
 ): Promise<NodeExecutionResult> {
+  const { userInputs, context: execContext } = context;
+  const waitForReply =
+    context.nodeData.waitForReply !== undefined
+      ? Boolean(context.nodeData.waitForReply)
+      : context.nodeData.data?.waitForReply !== undefined
+      ? Boolean(context.nodeData.data.waitForReply)
+      : false;
+
+  const existingInput = userInputs.find((ui) => ui.nodeId === context.nodeId);
+  if (waitForReply && !existingInput) {
+    return {
+      waitingForInput: true,
+      output: '',
+      messages: [],
+    };
+  }
+
   // TODO: Implement intent recognition logic
   // For now, just pass through to first intent node
   const intentNodeIds = context.nodeData.intentNodeIds || {};
   const firstIntent = Object.keys(intentNodeIds)[0];
-  const nextNodeId = firstIntent ? intentNodeIds[firstIntent] : null;
+  const fallbackIntent = context.nodeData.defaultIntent || 'default';
+  const selectedIntent = firstIntent || fallbackIntent;
+  const nextNodeId = selectedIntent ? intentNodeIds[selectedIntent] || null : null;
+
+  if (!execContext.nodeOutputs) {
+    execContext.nodeOutputs = {};
+  }
+  execContext.nodeOutputs[context.nodeId] = {
+    text: selectedIntent,
+  };
 
   return {
-    output: context.input || '',
+    output: selectedIntent,
     nextNodeId,
-    messages: [], // Intent recognition doesn't send messages yet
+    messages: waitForReply && existingInput
+      ? [{ role: 'user', content: String(existingInput.value) }]
+      : [],
   };
 }
 
@@ -253,6 +332,27 @@ export async function executeSendMessageNode(
   context: NodeExecutionContext
 ): Promise<NodeExecutionResult> {
   const { nodeData, context: execContext, userInputs, allNodes } = context;
+  const waitForReply =
+    nodeData.waitForReply !== undefined
+      ? Boolean(nodeData.waitForReply)
+      : nodeData.data?.waitForReply !== undefined
+      ? Boolean(nodeData.data.waitForReply)
+      : false;
+
+  const existingInput = userInputs.find((ui) => ui.nodeId === context.nodeId);
+  if (waitForReply && existingInput) {
+    const nextNodeId = context.nodeData.outgoingNodeId || null;
+    return {
+      output: existingInput.value,
+      nextNodeId,
+      messages: [
+        {
+          role: 'user',
+          content: String(existingInput.value),
+        },
+      ],
+    };
+  }
 
   // Get message variants from node data
   const messageVariants = nodeData.messageVariants || nodeData.data?.messageVariants || [];
@@ -278,15 +378,26 @@ export async function executeSendMessageNode(
   // Get the next node
   const nextNodeId = context.nodeData.outgoingNodeId || null;
 
+  const messages = [
+    {
+      role: 'assistant' as const,
+      content: selectedMessage,
+    },
+  ];
+
+  if (waitForReply) {
+    return {
+      waitingForInput: true,
+      output: selectedMessage,
+      nextNodeId,
+      messages,
+    };
+  }
+
   return {
     output: selectedMessage,
     nextNodeId,
-    messages: [
-      {
-        role: 'assistant',
-        content: selectedMessage,
-      },
-    ],
+    messages,
   };
 }
 
@@ -328,7 +439,7 @@ export async function executeWaitForReplyNode(
 
 /**
  * Execute an End node
- * End node: No message, no pause, no variables stored, just signals restart
+ * End node: No message, no pause, no variables stored, signals restart after next input
  */
 export async function executeEndNode(
   context: NodeExecutionContext

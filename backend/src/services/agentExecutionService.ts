@@ -67,6 +67,16 @@ export class AgentExecutionService {
       executionState = execution.executionState 
         ? JSON.parse(JSON.stringify(execution.executionState))
         : {};
+
+      // If the last run ended and is waiting for a new user message to restart,
+      // restart the workflow with this input instead of resuming the end node.
+      if (executionState.context?.pendingRestart) {
+        await AgentExecution.delete(execution.id!);
+        return this.execute(agentId, userId, {
+          input: request.input,
+          isRestart: true,
+        });
+      }
       
       // Ensure userInputs array exists (this stores all user inputs for variable resolution)
       if (!executionState.userInputs) {
@@ -215,18 +225,34 @@ export class AgentExecutionService {
 
     // Handle restart if End node was reached
     if (result.shouldRestart) {
-      // Clear execution state
-      if (execution) {
-        await AgentExecution.delete(execution.id!);
+      // End node reached: wait for a new user message before restarting.
+      if (!executionState.context) {
+        executionState.context = {};
+      }
+      executionState.context.pendingRestart = true;
+
+      // Create or update execution (session) to wait for input
+      if (!execution) {
+        execution = await AgentExecution.create({
+          agentId,
+          userId,
+          executionState,
+          status: 'waiting_input',
+        });
+      } else {
+        await AgentExecution.update(execution.id!, {
+          executionState,
+          status: 'waiting_input',
+        });
       }
 
-      // Save final messages to chat history before restarting
-      if (result.messages && result.messages.length > 0) {
+      // Save messages to chat history (associated with this session)
+      if (result.messages) {
         for (const msg of result.messages) {
           await AgentChatMessage.create({
             agentId,
             userId,
-            executionId: undefined, // End node reached, session will be deleted
+            executionId: execution.id || undefined,
             role: msg.role,
             content: msg.content,
             references: msg.references,
@@ -239,10 +265,13 @@ export class AgentExecutionService {
         }
       }
 
-      // Restart workflow
-      return this.execute(agentId, userId, {
-        isRestart: true,
-      });
+      return {
+        status: 'waiting_input',
+        message: result.output || 'Waiting for input',
+        messages: result.messages,
+        executionId: execution.id,
+        waitingForNodeId: executionState.currentNodeId,
+      };
     }
 
     // Workflow completed normally (reached end of workflow without End node or waiting node)

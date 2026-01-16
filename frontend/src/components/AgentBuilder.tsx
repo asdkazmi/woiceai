@@ -32,6 +32,7 @@ import WaitForReplyNode from './agent-nodes/WaitForReplyNode';
 import EndNode from './agent-nodes/EndNode';
 import PlaceholderNode from './agent-nodes/PlaceholderNode';
 import NodeConfigPanel from './agent-nodes/NodeConfigPanel';
+import AddNodeEdge from './edges/AddNodeEdge';
 
 // Define nodeTypes outside component to prevent recreation on every render
 const nodeTypes: NodeTypes = {
@@ -43,6 +44,10 @@ const nodeTypes: NodeTypes = {
   sendMessage: SendMessageNode,
   end: EndNode,
   placeholder: PlaceholderNode,
+};
+
+const edgeTypes = {
+  addNode: AddNodeEdge,
 };
 
 const initialNodeId = 1;
@@ -57,14 +62,22 @@ const computeSubtreeWidth = (
   nodeId: string,
   nodeMap: Map<string, Node>,
   outgoingMap: Map<string, Edge[]>,
-  memo: Map<string, number>
+  memo: Map<string, number>,
+  visiting: Set<string>
 ): number => {
   if (memo.has(nodeId)) return memo.get(nodeId)!;
+  if (visiting.has(nodeId)) {
+    // Cycle guard: treat as leaf to avoid infinite recursion
+    memo.set(nodeId, 1);
+    return 1;
+  }
+  visiting.add(nodeId);
   const node = nodeMap.get(nodeId);
   const children = outgoingMap.get(nodeId) || [];
 
   if (!node) {
     memo.set(nodeId, 1);
+    visiting.delete(nodeId);
     return 1;
   }
 
@@ -78,33 +91,39 @@ const computeSubtreeWidth = (
     );
 
     const trueWidth = trueEdge
-      ? computeSubtreeWidth(trueEdge.target, nodeMap, outgoingMap, memo)
+      ? computeSubtreeWidth(trueEdge.target, nodeMap, outgoingMap, memo, visiting)
       : 1;
     const falseWidth = falseEdge
-      ? computeSubtreeWidth(falseEdge.target, nodeMap, outgoingMap, memo)
+      ? computeSubtreeWidth(falseEdge.target, nodeMap, outgoingMap, memo, visiting)
       : 1;
     const otherWidth = otherEdges.reduce(
-      (sum, edge) => sum + computeSubtreeWidth(edge.target, nodeMap, outgoingMap, memo),
+      (sum, edge) =>
+        sum + computeSubtreeWidth(edge.target, nodeMap, outgoingMap, memo, visiting),
       0
     );
 
     const total = trueWidth + falseWidth + otherWidth;
     const width = Math.max(total, 2); // ensure at least two slots
     memo.set(nodeId, width);
+    visiting.delete(nodeId);
     return width;
   }
 
   if (children.length === 0) {
     memo.set(nodeId, 1);
+    visiting.delete(nodeId);
     return 1;
   }
 
   // For linear nodes: keep widest child to maintain alignment
   const width = Math.max(
     1,
-    ...children.map((edge) => computeSubtreeWidth(edge.target, nodeMap, outgoingMap, memo))
+    ...children.map((edge) =>
+      computeSubtreeWidth(edge.target, nodeMap, outgoingMap, memo, visiting)
+    )
   );
   memo.set(nodeId, width);
+  visiting.delete(nodeId);
   return width;
 };
 
@@ -130,7 +149,10 @@ const repositionNodesVertically = (nodes: Node[], edges: Edge[]): Node[] => {
 
   // Pre-compute subtree widths
   const widthMemo = new Map<string, number>();
-  nodeMap.forEach((_n, id) => computeSubtreeWidth(id, nodeMap, outgoingMap, widthMemo));
+  const visiting = new Set<string>();
+  nodeMap.forEach((_n, id) =>
+    computeSubtreeWidth(id, nodeMap, outgoingMap, widthMemo, visiting)
+  );
 
   const positioned = new Set<string>();
   const result: Node[] = [];
@@ -219,10 +241,11 @@ const AgentBuilderInner: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [nodeIdCounter, setNodeIdCounter] = useState(initialNodeId);
-  const [activeTab, setActiveTab] = useState<'config' | 'chat'>('config');
+  const [activeTab, setActiveTab] = useState<'config' | 'chat' | 'variables'>('config');
   const [showNodeTypeModal, setShowNodeTypeModal] = useState(false);
   const [sourceNodeForConnection, setSourceNodeForConnection] = useState<Node | null>(null);
   const [targetNodeForInsertion, setTargetNodeForInsertion] = useState<string | null>(null);
+  const [edgeIdForInsertion, setEdgeIdForInsertion] = useState<string | null>(null);
   
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -421,7 +444,7 @@ const AgentBuilderInner: React.FC = () => {
           target: e.target,
           sourceHandle: e.sourceHandle || 'source',
           targetHandle: e.targetHandle || null,
-          type: 'smoothstep', // Use smoothstep edges for turning connections
+          type: 'addNode', // Custom edge with add-node icon
         }));
         
         // Reposition all nodes to ensure vertical alignment with fixed spacing
@@ -461,7 +484,7 @@ const AgentBuilderInner: React.FC = () => {
 
   const onConnect = useCallback(
     (params: Connection) => {
-      setEdges((eds) => addEdge(params, eds));
+      setEdges((eds) => addEdge({ ...params, type: 'addNode' }, eds));
     },
     [setEdges]
   );
@@ -507,8 +530,16 @@ const AgentBuilderInner: React.FC = () => {
     }, -1);
     const nextNodeId = maxNodeId + 1;
     
+    const existingIds = new Set(nodes.map((node) => node.id));
+    let nextNodeIndex = nodeIdCounter;
+    let newNodeId = `node-${nextNodeIndex}`;
+    while (existingIds.has(newNodeId)) {
+      nextNodeIndex += 1;
+      newNodeId = `node-${nextNodeIndex}`;
+    }
+
     const newNode: Node = {
-      id: `node-${nodeIdCounter}`,
+      id: newNodeId,
       type,
       position: { x: newX, y: newY },
       data: {
@@ -517,94 +548,78 @@ const AgentBuilderInner: React.FC = () => {
       },
       draggable: false, // Disable dragging
     };
-    
-    // If inserting between nodes, shift all nodes below targetNode down
-    if (targetNodeId) {
-      const targetNode = nodes.find((n) => n.id === targetNodeId);
-      if (targetNode) {
-        setNodes((nds) =>
-          nds.map((node) => {
-            if (node.position.y >= targetNode.position.y && node.id !== targetNodeId) {
-              return {
-                ...node,
-                position: { ...node.position, y: node.position.y + VERTICAL_SPACING },
-              };
-            }
-            return node;
-          })
-        );
+ 
+    const matchesSourceHandle = (edgeHandle?: string | null) => {
+      if (!effectiveSourceHandle || effectiveSourceHandle === 'source') {
+        return !edgeHandle || edgeHandle === 'source';
       }
-    }
-    
-    setNodes((nds) => [...nds, newNode]);
-    
-    // If inserting between nodes (targetNodeId provided), reconnect edges
-    if (targetNodeId) {
-      // Remove the old edge from sourceNodeId to targetNodeId
-      setEdges((eds) => {
-        const filteredEdges = eds.filter(
-          (e) => !(e.source === sourceNodeId && e.target === targetNodeId)
-        );
-        
-        // Add two new edges: sourceNodeId -> newNode -> targetNodeId
-        const newEdge1: Edge = {
-          id: `edge-${sourceNodeId}-${newNode.id}`,
-          source: sourceNodeId,
-          target: newNode.id,
-          sourceHandle: effectiveSourceHandle,
-          targetHandle: null,
-          type: 'smoothstep',
-        };
-        
-        const newEdge2: Edge = {
-          id: `edge-${newNode.id}-${targetNodeId}`,
-          source: newNode.id,
-          target: targetNodeId,
-          sourceHandle: 'source',
-          targetHandle: null,
-          type: 'smoothstep',
-        };
-        
-        return [...filteredEdges, newEdge1, newEdge2];
-      });
-    } else {
-      // Normal case: just connect source node to new node
-      const newEdge: Edge = {
-        id: `edge-${sourceNodeId}-${newNode.id}`,
-        source: sourceNodeId,
-        target: newNode.id,
-        sourceHandle: effectiveSourceHandle,
-        targetHandle: null,
-        type: 'smoothstep',
-      };
-      setEdges((eds) => [...eds, newEdge]);
-    }
-    
-    setNodeIdCounter((prev) => prev + 1);
+      return edgeHandle === effectiveSourceHandle;
+    };
+
+    const filteredEdges = targetNodeId
+      ? edges.filter((e) => {
+          if (edgeIdForInsertion) {
+            return e.id !== edgeIdForInsertion;
+          }
+          return !(
+            e.source === sourceNodeId &&
+            e.target === targetNodeId &&
+            matchesSourceHandle(e.sourceHandle)
+          );
+        })
+      : edges;
+
+    const nextEdgeSourceHandle = type === 'ifElse' ? 'true' : 'source';
+    const updatedEdges: Edge[] = targetNodeId
+      ? [
+          ...filteredEdges,
+          {
+            id: `edge-${sourceNodeId}-${newNode.id}`,
+            source: sourceNodeId,
+            target: newNode.id,
+            sourceHandle: effectiveSourceHandle,
+            targetHandle: null,
+            type: 'addNode',
+          },
+          {
+            id: `edge-${newNode.id}-${targetNodeId}`,
+            source: newNode.id,
+            target: targetNodeId,
+            sourceHandle: nextEdgeSourceHandle,
+            targetHandle: null,
+            type: 'addNode',
+          },
+        ]
+      : [
+          ...filteredEdges,
+          {
+            id: `edge-${sourceNodeId}-${newNode.id}`,
+            source: sourceNodeId,
+            target: newNode.id,
+            sourceHandle: effectiveSourceHandle,
+            targetHandle: null,
+            type: 'addNode',
+          },
+        ];
+
+    const updatedNodes = repositionNodesVertically([...nodes, newNode], updatedEdges);
+    setNodes(updatedNodes);
+    setEdges(updatedEdges);
+
+    setNodeIdCounter(nextNodeIndex + 1);
     setShowNodeTypeModal(false);
     setSourceNodeForConnection(null);
     setSourceHandleForConnection(null);
     setTargetNodeForInsertion(null);
-    
-    // Reposition all nodes after adding to ensure fixed spacing
-    setTimeout(() => {
-      setNodes((nds) => {
-        const updatedEdges = targetNodeId 
-          ? edges.filter((e) => !(e.source === sourceNodeId && e.target === targetNodeId))
-              .concat([
-                { id: `edge-${sourceNodeId}-${newNode.id}`, source: sourceNodeId, target: newNode.id, sourceHandle: effectiveSourceHandle, targetHandle: null, type: 'smoothstep' },
-                { id: `edge-${newNode.id}-${targetNodeId}`, source: newNode.id, target: targetNodeId, sourceHandle: 'source', targetHandle: null, type: 'smoothstep' },
-              ])
-          : edges.concat([{ id: `edge-${sourceNodeId}-${newNode.id}`, source: sourceNodeId, target: newNode.id, sourceHandle: effectiveSourceHandle, targetHandle: null, type: 'smoothstep' }]);
-        return repositionNodesVertically([...nds, newNode], updatedEdges);
-      });
-    }, 0);
+    setEdgeIdForInsertion(null);
   };
 
   const handleInsertNodeBetween = (edge: Edge) => {
     // When user wants to insert a node between two connected nodes
     setSourceNodeForConnection({ id: edge.source } as Node);
+    setSourceHandleForConnection(edge.sourceHandle || null);
     setTargetNodeForInsertion(edge.target);
+    setEdgeIdForInsertion(edge.id);
     setShowNodeTypeModal(true);
   };
 
@@ -672,7 +687,7 @@ const AgentBuilderInner: React.FC = () => {
               target: outgoingEdge.target,
               sourceHandle: incomingEdge.sourceHandle,
               targetHandle: outgoingEdge.targetHandle,
-              type: 'smoothstep',
+              type: 'addNode',
             });
           }
         }
@@ -704,6 +719,45 @@ const AgentBuilderInner: React.FC = () => {
     if (!hasStartNode) {
       setError('Agent must have a Start node');
       return;
+    }
+
+    // Ensure every reachable leaf ends with an End node
+    const outgoingMap = new Map<string, Edge[]>();
+    edges.forEach((edge) => {
+      if (!outgoingMap.has(edge.source)) outgoingMap.set(edge.source, []);
+      outgoingMap.get(edge.source)!.push(edge);
+    });
+    const startNode = nodes.find((n) => n.id === 'node-start' || n.type === 'start');
+    if (startNode) {
+      const reachable = new Set<string>();
+      const queue: string[] = [startNode.id];
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (reachable.has(current)) continue;
+        reachable.add(current);
+        const outgoing = outgoingMap.get(current) || [];
+        outgoing.forEach((edge) => {
+          if (!reachable.has(edge.target)) queue.push(edge.target);
+        });
+      }
+
+      const reachableNodes = nodes.filter((node) => reachable.has(node.id));
+      const hasMissingEnd = reachableNodes.some((node) => {
+        const outgoing = outgoingMap.get(node.id) || [];
+
+        if (node.type === 'ifElse') {
+          const hasTrue = outgoing.some((edge) => edge.sourceHandle === 'true');
+          const hasFalse = outgoing.some((edge) => edge.sourceHandle === 'false');
+          return !hasTrue || !hasFalse;
+        }
+
+        return outgoing.length === 0 && node.type !== 'end';
+      });
+
+      if (hasMissingEnd) {
+        setError('Every branch must end with an End node');
+        return;
+      }
     }
 
     try {
@@ -763,6 +817,8 @@ const AgentBuilderInner: React.FC = () => {
           knowledgeBaseId: null,
           chatAIId: null,
           passContext: true,
+          sendOutput: true,
+          waitForReply: false,
         };
       case 'waitForReply':
         return {};
@@ -776,10 +832,12 @@ const AgentBuilderInner: React.FC = () => {
             { name: 'greeting', patterns: [], keywords: ['hello', 'hi'] },
           ],
           defaultIntent: 'default',
+          waitForReply: false,
         };
       case 'sendMessage':
         return {
           messageVariants: ['Hello!', 'Hi there!', 'Greetings!'],
+          waitForReply: false,
         };
       case 'end':
         return {
@@ -841,13 +899,6 @@ const AgentBuilderInner: React.FC = () => {
       return;
     }
     
-    // Check if End node exists - if so, no placeholders needed
-    const endNode = nodes.find((n) => n.type === 'end');
-    if (endNode) {
-      setPlaceholderStates([]);
-      return;
-    }
-    
     const nodeMap = new Map(nodes.map((n) => [n.id, { ...n }]));
     const outgoingMap = new Map<string, Edge[]>();
     edges.forEach((e) => {
@@ -855,8 +906,9 @@ const AgentBuilderInner: React.FC = () => {
       outgoingMap.get(e.source)!.push(e);
     });
     const widthMemo = new Map<string, number>();
+    const visiting = new Set<string>();
     nodeMap.forEach((_n, nodeId) =>
-      computeSubtreeWidth(nodeId, nodeMap, outgoingMap, widthMemo)
+      computeSubtreeWidth(nodeId, nodeMap, outgoingMap, widthMemo, visiting)
     );
 
     const newPlaceholderStates: Array<{
@@ -979,6 +1031,75 @@ const AgentBuilderInner: React.FC = () => {
     }));
   }, [placeholderStates]);
 
+  const renderEdges = useMemo(
+    () =>
+      edges.map((edge) => ({
+        ...edge,
+        type: edge.type || 'addNode',
+        data: {
+          ...(edge.data || {}),
+          onInsert: handleInsertNodeBetween,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle,
+        },
+      })),
+    [edges, handleInsertNodeBetween]
+  );
+
+  const availableVariables = useMemo(() => {
+    const vars: Array<{ key: string; description: string }> = [
+      { key: '{{user.input.latest}}', description: 'The latest input received from the user' },
+      { key: '{{user.input.first}}', description: 'The first input received at the start of the workflow' },
+    ];
+
+    const waitNodes = new Set<string>();
+    nodes.forEach((node) => {
+      if (node.type === 'waitForReply') {
+        waitNodes.add(node.id);
+      }
+      if (node.type === 'ifElse') {
+        waitNodes.add(node.id);
+      }
+      if (node.type === 'chatAI' && node.data?.waitForReply) {
+        waitNodes.add(node.id);
+      }
+      if (node.type === 'sendMessage' && node.data?.waitForReply) {
+        waitNodes.add(node.id);
+      }
+      if (node.type === 'intentRecognition' && node.data?.waitForReply) {
+        waitNodes.add(node.id);
+      }
+    });
+
+    nodes.forEach((node) => {
+      const numericId = node.data?.nodeId;
+      if (numericId === undefined || typeof numericId !== 'number') return;
+
+      if (node.type === 'chatAI') {
+        vars.push({
+          key: `{{node[${numericId}].output.text}}`,
+          description: 'Chat AI output text',
+        });
+      }
+
+      if (node.type === 'intentRecognition') {
+        vars.push({
+          key: `{{node[${numericId}].output.text}}`,
+          description: 'Intent recognition output',
+        });
+      }
+
+      if (waitNodes.has(node.id)) {
+        vars.push({
+          key: `{{node[${numericId}].user.message}}`,
+          description: 'User message captured at this node',
+        });
+      }
+    });
+
+    return vars;
+  }, [nodes]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -1045,7 +1166,7 @@ const AgentBuilderInner: React.FC = () => {
                 ...placeholderNodes
               ]}
               edges={[
-                ...edges,
+                ...renderEdges,
                 ...placeholderEdges
               ]}
               onNodesChange={handleNodesChange}
@@ -1066,7 +1187,8 @@ const AgentBuilderInner: React.FC = () => {
                 }
               }}
               nodeTypes={nodeTypes}
-              defaultEdgeOptions={{ type: 'smoothstep' }}
+              edgeTypes={edgeTypes}
+              defaultEdgeOptions={{ type: 'addNode' }}
               connectionLineType={ConnectionLineType.SmoothStep}
             >
               <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
@@ -1080,10 +1202,10 @@ const AgentBuilderInner: React.FC = () => {
         <div className="w-96 flex flex-col gap-4">
           {/* Tabs */}
           <div className="bg-white border border-gray-200 rounded-md">
-            <div className="flex border-b border-gray-200">
+            <div className="flex border-b border-gray-200 overflow-x-auto whitespace-nowrap">
               <button
                 onClick={() => setActiveTab('config')}
-                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                className={`flex-none px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
                   activeTab === 'config'
                     ? 'text-primary border-b-2 border-primary bg-gray-50'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
@@ -1096,7 +1218,7 @@ const AgentBuilderInner: React.FC = () => {
               </button>
               <button
                 onClick={() => setActiveTab('chat')}
-                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                className={`flex-none px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
                   activeTab === 'chat'
                     ? 'text-primary border-b-2 border-primary bg-gray-50'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
@@ -1105,6 +1227,19 @@ const AgentBuilderInner: React.FC = () => {
                 <div className="flex items-center justify-center gap-2">
                   <MessageSquare size={16} />
                   <span>Test Chat</span>
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveTab('variables')}
+                className={`flex-none px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                  activeTab === 'variables'
+                    ? 'text-primary border-b-2 border-primary bg-gray-50'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-base">{"{}"}</span>
+                  <span>Available Variables</span>
                 </div>
               </button>
             </div>
@@ -1120,6 +1255,7 @@ const AgentBuilderInner: React.FC = () => {
                     onUpdate={(data) => handleUpdateNode(selectedNode.id, data)}
                     onDelete={() => handleDeleteNode(selectedNode.id)}
                     isStartNode={selectedNode.id === 'node-start'}
+                    availableVariables={availableVariables.map((variable) => variable.key)}
                   />
                 ) : (
                   <div className="text-center text-gray-500 py-12">
@@ -1128,9 +1264,31 @@ const AgentBuilderInner: React.FC = () => {
                   </div>
                 )}
               </div>
-            ) : (
+            ) : activeTab === 'chat' ? (
               <div className="flex-1 min-h-0">
                 <AgentBuilderChat agentId={agent?.id} agentData={agentDataForChat} />
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-4">
+                {availableVariables.length === 0 ? (
+                  <div className="text-center text-gray-500 py-12">
+                    <p className="text-sm">No variables available yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="text-xs text-gray-500">
+                      Replace <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">[ID]</code> with the node ID shown in the builder.
+                    </div>
+                    <div className="space-y-3 text-sm text-gray-700">
+                      {availableVariables.map((variable, index) => (
+                        <div key={`${variable.key}-${index}`} className="border border-gray-200 rounded-sm p-3">
+                          <code className="text-xs bg-gray-100 px-2 py-1 rounded">{variable.key}</code>
+                          <p className="mt-2 text-xs text-gray-600">{variable.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1149,6 +1307,7 @@ const AgentBuilderInner: React.FC = () => {
                   setSourceNodeForConnection(null);
                   setSourceHandleForConnection(null);
                   setTargetNodeForInsertion(null);
+                  setEdgeIdForInsertion(null);
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >

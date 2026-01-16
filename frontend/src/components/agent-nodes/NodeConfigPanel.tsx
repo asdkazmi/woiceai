@@ -10,12 +10,118 @@ interface NodeConfigPanelProps {
   onUpdate: (data: any) => void;
   onDelete: () => void;
   isStartNode?: boolean;
+  availableVariables?: string[];
 }
 
-const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onUpdate, onDelete, isStartNode = false }) => {
+interface VariableTextareaProps {
+  value: string;
+  onChange: (value: string) => void;
+  variables: string[];
+  rows?: number;
+  placeholder?: string;
+  className?: string;
+}
+
+const VariableTextarea: React.FC<VariableTextareaProps> = ({
+  value,
+  onChange,
+  variables,
+  rows = 3,
+  placeholder,
+  className,
+}) => {
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [filtered, setFiltered] = useState<string[]>([]);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+
+  const updateSuggestions = (nextValue: string, cursorPos: number) => {
+    const startIndex = nextValue.lastIndexOf('{{', cursorPos - 1);
+    if (startIndex === -1) {
+      setIsOpen(false);
+      setOpenIndex(null);
+      return;
+    }
+
+    const closeIndex = nextValue.indexOf('}}', startIndex + 2);
+    if (closeIndex !== -1 && closeIndex < cursorPos) {
+      setIsOpen(false);
+      setOpenIndex(null);
+      return;
+    }
+
+    const query = nextValue.slice(startIndex + 2, cursorPos).trim();
+    const matches = variables.filter((variable) => {
+      if (!query) return true;
+      return variable.toLowerCase().includes(query.toLowerCase());
+    });
+    setFiltered(matches);
+    setIsOpen(matches.length > 0);
+    setOpenIndex(startIndex);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const nextValue = e.target.value;
+    onChange(nextValue);
+    updateSuggestions(nextValue, e.target.selectionStart ?? nextValue.length);
+  };
+
+  const handleSelect = (variable: string) => {
+    if (openIndex === null) {
+      onChange(value + variable);
+      setIsOpen(false);
+      return;
+    }
+    const cursorPos = textareaRef.current?.selectionStart ?? value.length;
+    const nextValue = value.slice(0, openIndex) + variable + value.slice(cursorPos);
+    onChange(nextValue);
+    setIsOpen(false);
+    requestAnimationFrame(() => {
+      const newCursor = openIndex + variable.length;
+      textareaRef.current?.setSelectionRange(newCursor, newCursor);
+      textareaRef.current?.focus();
+    });
+  };
+
+  return (
+    <div className="relative">
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={handleChange}
+        onBlur={() => setTimeout(() => setIsOpen(false), 150)}
+        onFocus={(e) => updateSuggestions(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+        className={className}
+        rows={rows}
+        placeholder={placeholder}
+      />
+      {isOpen && (
+        <div className="absolute z-20 mt-1 w-full max-h-48 overflow-auto rounded-sm border border-gray-200 bg-white shadow-sm">
+          {filtered.map((variable) => (
+            <button
+              key={variable}
+              type="button"
+              onClick={() => handleSelect(variable)}
+              className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50"
+            >
+              {variable}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({
+  node,
+  onUpdate,
+  onDelete,
+  isStartNode = false,
+  availableVariables = [],
+}) => {
   const [publishedChatAIs, setPublishedChatAIs] = useState<ChatAI[]>([]);
   const [loadingChatAIs, setLoadingChatAIs] = useState(false);
-  const [showVariables, setShowVariables] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   
   const nodeId = node.data?.nodeId !== undefined ? node.data.nodeId : undefined;
@@ -178,15 +284,42 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onUpdate, onDel
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Input Message
               </label>
-              <textarea
+              <VariableTextarea
                 value={(node.data?.inputMessage as string | undefined) || ''}
-                onChange={(e) => onUpdate({ inputMessage: e.target.value })}
+                onChange={(value) => onUpdate({ inputMessage: value })}
+                variables={availableVariables}
                 className="w-full px-3 py-2 border border-gray-200 rounded-sm text-sm focus:border-primary focus:ring-1 focus:ring-primary"
                 rows={3}
                 placeholder="e.g., {{user.input.latest}} or Custom message with variables"
               />
               <p className="text-xs text-gray-500 mt-1">
-                You can use variables like <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{'{{user.input.latest}}'}</code>, <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{'{{user.input.first}}'}</code>, or <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{'{{node[ID].user.message}}'}</code>
+                You can use variables like <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{'{{user.input.latest}}'}</code>, <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{'{{user.input.first}}'}</code>, <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{'{{node[ID].user.message}}'}</code>, or <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{'{{node[ID].output.text}}'}</code>
+              </p>
+            </div>
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={node.data?.sendOutput !== false}
+                  onChange={(e) => onUpdate({ sendOutput: e.target.checked })}
+                  className="rounded-sm border-gray-300 text-primary focus:ring-primary"
+                />
+                <span>Send Output</span>
+              </label>
+              <p className="text-xs text-gray-500">
+                If enabled, the Chat AI response is sent as an output message.
+              </p>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(node.data?.waitForReply)}
+                  onChange={(e) => onUpdate({ waitForReply: e.target.checked })}
+                  className="rounded-sm border-gray-300 text-primary focus:ring-primary"
+                />
+                <span>Wait For Reply After Execution</span>
+              </label>
+              <p className="text-xs text-gray-500">
+                If enabled, the workflow pauses for a user reply before moving on.
               </p>
             </div>
           </div>
@@ -289,6 +422,20 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onUpdate, onDel
                 placeholder="default"
               />
             </div>
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(node.data?.waitForReply)}
+                  onChange={(e) => onUpdate({ waitForReply: e.target.checked })}
+                  className="rounded-sm border-gray-300 text-primary focus:ring-primary"
+                />
+                <span>Wait For Reply After Execution</span>
+              </label>
+              <p className="text-xs text-gray-500">
+                If enabled, the workflow pauses for a user reply before moving on.
+              </p>
+            </div>
           </div>
         );
 
@@ -307,13 +454,14 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onUpdate, onDel
               <div className="space-y-2">
                 {messageVariants.map((variant, index) => (
                   <div key={index} className="flex gap-2">
-                    <textarea
+                    <VariableTextarea
                       value={variant}
-                      onChange={(e) => {
+                      onChange={(value) => {
                         const newVariants = [...messageVariants];
-                        newVariants[index] = e.target.value;
+                        newVariants[index] = value;
                         onUpdate({ messageVariants: newVariants });
                       }}
+                      variables={availableVariables}
                       className="flex-1 px-3 py-2 border border-gray-200 rounded-sm text-sm focus:border-primary focus:ring-1 focus:ring-primary"
                       rows={2}
                       placeholder="Message variant"
@@ -341,6 +489,20 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onUpdate, onDel
                 </button>
               </div>
             </div>
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(node.data?.waitForReply)}
+                  onChange={(e) => onUpdate({ waitForReply: e.target.checked })}
+                  className="rounded-sm border-gray-300 text-primary focus:ring-primary"
+                />
+                <span>Wait For Reply After Execution</span>
+              </label>
+              <p className="text-xs text-gray-500">
+                If enabled, the workflow pauses for a user reply before moving on.
+              </p>
+            </div>
           </div>
         );
       }
@@ -352,9 +514,10 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onUpdate, onDel
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Final Message (Optional)
               </label>
-              <textarea
+              <VariableTextarea
                 value={(node.data?.finalMessage as string | undefined) || ''}
-                onChange={(e) => onUpdate({ finalMessage: e.target.value })}
+                onChange={(value) => onUpdate({ finalMessage: value })}
+                variables={availableVariables}
                 className="w-full px-3 py-2 border border-gray-200 rounded-sm text-sm focus:border-primary focus:ring-1 focus:ring-primary"
                 rows={3}
                 placeholder="Message to show before restarting workflow"
@@ -407,41 +570,6 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onUpdate, onDel
       
       {renderConfig()}
       
-      {/* Variables Documentation - Hidden for Start and End nodes */}
-      {node.type !== 'start' && node.type !== 'end' && (
-        <div className="border-t border-gray-200 pt-4">
-          <button
-            onClick={() => setShowVariables(!showVariables)}
-            className="w-full text-left text-sm font-medium text-gray-700 hover:text-gray-900 flex items-center justify-between"
-          >
-            <span>Available Variables</span>
-            <span className="text-gray-400">{showVariables ? '−' : '+'}</span>
-          </button>
-          {showVariables && (
-            <div className="mt-3 space-y-3 text-sm text-gray-600">
-              <div>
-                <code className="text-xs bg-gray-100 px-2 py-1 rounded">{'{{user.input.latest}}'}</code>
-                <p className="mt-1 text-xs">The latest input received from the user</p>
-              </div>
-              <div>
-                <code className="text-xs bg-gray-100 px-2 py-1 rounded">{'{{user.input.first}}'}</code>
-                <p className="mt-1 text-xs">The first input received from the user at the start of the workflow</p>
-              </div>
-              {nodeId !== undefined && (
-                <div>
-                  <code className="text-xs bg-gray-100 px-2 py-1 rounded">{`{{node[${String(nodeId)}].user.message}}`}</code>
-                  <p className="mt-1 text-xs">The user message from this node (if this node collects user input)</p>
-                </div>
-              )}
-              <div className="pt-2 border-t border-gray-100">
-                <p className="text-xs text-gray-500">
-                  <strong>Note:</strong> Replace <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">[ID]</code> with the actual node ID (0, 1, 2, etc.) to access messages from specific nodes.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 };

@@ -1,11 +1,12 @@
 import React from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Brain } from 'lucide-react';
+import { Brain, Plus } from 'lucide-react';
 
 interface IntentRecognitionNodeProps extends NodeProps {
+  onAddConnection?: () => void;
 }
 
-const IntentRecognitionNode: React.FC<IntentRecognitionNodeProps> = ({ data, selected }) => {
+const IntentRecognitionNode: React.FC<IntentRecognitionNodeProps> = ({ data, onAddConnection, selected }) => {
   const intentCategories = (data?.intentCategories as any[] | undefined) || [];
   const intentCount = Array.isArray(intentCategories) ? intentCategories.length : 0;
   const nodeId = typeof data?.nodeId === 'number' ? data.nodeId : undefined;
@@ -27,6 +28,18 @@ const IntentRecognitionNode: React.FC<IntentRecognitionNodeProps> = ({ data, sel
       ) : null}
       <Handle type="target" position={Position.Top} className="w-3 h-3" />
       <Handle type="source" position={Position.Bottom} className="w-3 h-3" id="source" />
+      {onAddConnection ? (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onAddConnection();
+          }}
+          className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center hover:bg-primary/90 transition-colors shadow-md z-10"
+          title="Add node"
+        >
+          <Plus size={16} />
+        </button>
+      ) : null}
     </div>
   );
 };
