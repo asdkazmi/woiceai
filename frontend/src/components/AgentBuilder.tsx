@@ -918,6 +918,7 @@ const AgentBuilderInner: React.FC = () => {
         return {
           welcomeMessage: 'Welcome!',
           restartMessage: 'Welcome back!',
+          storeChatHistory: false,
         };
       case 'chatAI':
         return {
@@ -1158,6 +1159,14 @@ const AgentBuilderInner: React.FC = () => {
       { key: '{{user.input.latest}}', description: 'The latest input received from the user' },
       { key: '{{user.input.first}}', description: 'The first input received at the start of the workflow' },
     ];
+
+    const startNode = nodes.find((n) => n.id === 'node-start' || n.type === 'start');
+    if (startNode?.data?.storeChatHistory) {
+      vars.push({
+        key: '{{chat.messages}}',
+        description: 'Full session chat history (role + content pairs)',
+      });
+    }
 
     const waitNodes = new Set<string>();
     nodes.forEach((node) => {

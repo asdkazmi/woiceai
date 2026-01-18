@@ -114,8 +114,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }[] = [
     { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { id: 'knowledge-bases', label: 'Knowledge Bases', path: '/knowledge-bases', icon: Database },
-    { id: 'connectors', label: 'Connectors', path: '/connectors', icon: Plug },
     { id: 'agents', label: 'Agents', path: '/agents', icon: Bot },
+    { id: 'connectors', label: 'Connectors', path: '/connectors', icon: Plug },
   ];
 
   const handleMenuClick = (option: MenuOption, path: string) => {

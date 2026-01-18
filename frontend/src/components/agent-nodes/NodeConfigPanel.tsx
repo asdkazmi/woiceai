@@ -182,6 +182,20 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({
             <div className="text-sm text-gray-600">
               <p>The Start node marks the beginning of the workflow. The workflow will begin execution when a user sends the first message in the chat.</p>
             </div>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(node.data?.storeChatHistory)}
+                  onChange={(e) => onUpdate({ storeChatHistory: e.target.checked })}
+                  className="rounded-sm border-gray-300 text-primary focus:ring-primary"
+                />
+                <span>Store session chat history</span>
+              </label>
+              <p className="text-xs text-gray-500">
+                When enabled, full chat history (roles + content) is available as <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{'{{chat.messages}}'}</code>.
+              </p>
+            </div>
           </div>
         );
 

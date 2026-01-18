@@ -55,6 +55,13 @@ function resolveVariables(
 ): string {
   let result = template;
 
+  const storeChatHistory = Boolean(context?.storeChatHistory);
+  const chatMessages = storeChatHistory && Array.isArray(context?.chatMessages)
+    ? context.chatMessages
+    : [];
+  const chatReplacement = storeChatHistory ? JSON.stringify(chatMessages) : '';
+  result = result.replace(/\{\{chat\.messages\}\}/g, chatReplacement);
+
   // Resolve {{user.input.latest}} - latest user input
   const latestInput = userInputs.length > 0 ? userInputs[userInputs.length - 1].value : '';
   result = result.replace(/\{\{user\.input\.latest\}\}/g, String(latestInput));

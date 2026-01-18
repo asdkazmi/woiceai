@@ -68,31 +68,39 @@ export class AgentExecutionService {
         ? JSON.parse(JSON.stringify(execution.executionState))
         : {};
 
-      // If the last run ended and is waiting for a new user message to restart,
-      // restart the workflow with this input instead of resuming the end node.
       if (executionState.context?.pendingRestart) {
-        await AgentExecution.delete(execution.id!);
-        return this.execute(agentId, userId, {
-          input: request.input,
-          isRestart: true,
-        });
-      }
-      
-      // Ensure userInputs array exists (this stores all user inputs for variable resolution)
-      if (!executionState.userInputs) {
+        // Restart within the same session to keep chat history
+        if (!executionState.context) {
+          executionState.context = {};
+        }
+        executionState.context.pendingRestart = false;
+        executionState.context.isRestart = true;
+        executionState.currentNodeId = undefined;
         executionState.userInputs = [];
-      }
-      
-      // If we have input, it means we're resuming from a waiting node
-      // Store the input with the node ID it belongs to for variable resolution
-      if (request.input !== undefined && request.input !== null && request.input !== '') {
-        const waitingNodeId = executionState.currentNodeId;
-        if (waitingNodeId) {
-          // Add input to userInputs array - this allows the node to find it when it executes
+
+        if (request.input !== undefined && request.input !== null && request.input !== '') {
           executionState.userInputs.push({
-            nodeId: waitingNodeId,
+            nodeId: 'initial_input',
             value: request.input,
           });
+        }
+      } else {
+        // Ensure userInputs array exists (this stores all user inputs for variable resolution)
+        if (!executionState.userInputs) {
+          executionState.userInputs = [];
+        }
+        
+        // If we have input, it means we're resuming from a waiting node
+        // Store the input with the node ID it belongs to for variable resolution
+        if (request.input !== undefined && request.input !== null && request.input !== '') {
+          const waitingNodeId = executionState.currentNodeId;
+          if (waitingNodeId) {
+            // Add input to userInputs array - this allows the node to find it when it executes
+            executionState.userInputs.push({
+              nodeId: waitingNodeId,
+              value: request.input,
+            });
+          }
         }
       }
     } else {
@@ -133,6 +141,25 @@ export class AgentExecutionService {
     const startNode = nodes.find((n: any) => n.type === 'start');
     if (!startNode) {
       throw new Error('Agent workflow must have a Start node');
+    }
+
+    // Initialize chat history tracking if enabled on Start node
+    if (!executionState.context) {
+      executionState.context = {};
+    }
+    if (executionState.context.storeChatHistory === undefined) {
+      executionState.context.storeChatHistory = Boolean(startNode.data?.storeChatHistory);
+    }
+    if (executionState.context.storeChatHistory) {
+      if (!Array.isArray(executionState.context.chatMessages)) {
+        executionState.context.chatMessages = [];
+      }
+      if (request.input !== undefined && request.input !== null && String(request.input).trim() !== '') {
+        executionState.context.chatMessages.push({
+          role: 'user',
+          content: String(request.input),
+        });
+      }
     }
 
     // Start execution from Start node or current node
@@ -380,6 +407,22 @@ export class AgentExecutionService {
       // Collect messages
       if (result.messages) {
         messages.push(...result.messages);
+      }
+
+      if (executionState.context?.storeChatHistory && result.messages) {
+        if (!executionState.context) {
+          executionState.context = {};
+        }
+        if (!Array.isArray(executionState.context.chatMessages)) {
+          executionState.context.chatMessages = [];
+        }
+        result.messages.forEach((msg) => {
+          if (msg.role === 'user') return;
+          executionState.context!.chatMessages.push({
+            role: msg.role,
+            content: msg.content,
+          });
+        });
       }
 
       // Update execution context with any changes from node execution
