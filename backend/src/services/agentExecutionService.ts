@@ -147,6 +147,10 @@ export class AgentExecutionService {
     if (!executionState.context) {
       executionState.context = {};
     }
+    // Keep the latest request input accessible during this run for deterministic branching.
+    if (request.input !== undefined && request.input !== null) {
+      executionState.context.currentTurnInput = request.input;
+    }
     if (executionState.context.storeChatHistory === undefined) {
       executionState.context.storeChatHistory = Boolean(startNode.data?.storeChatHistory);
     }
@@ -365,29 +369,52 @@ export class AgentExecutionService {
       nodeMap.set(node.id, node);
     }
 
+    const MAX_STEPS_PER_RUN = 500; // Prevent infinite loops
+    let steps = 0;
+    const consumedUserInputIndexes = new Set<number>();
+    let allowLoopBackInputReplay = false;
+    let hasUsedLoopBackInputReplay = false;
+
     // Execute nodes until we hit a stopping condition
     while (currentNode) {
-      // Get outgoing edges for this node
-      const outgoingEdges = edgeMap.get(currentNode.id) || [];
-      
-      // Separate edges by source handle for conditional nodes
-      const trueEdge = outgoingEdges.find((targetId: string) => {
-        const edge = edges.find((e: any) => e.source === currentNode.id && e.target === targetId);
-        return edge?.sourceHandle === 'true';
-      });
-      const falseEdge = outgoingEdges.find((targetId: string) => {
-        const edge = edges.find((e: any) => e.source === currentNode.id && e.target === targetId);
-        return edge?.sourceHandle === 'false';
-      });
-      
+      if (++steps > MAX_STEPS_PER_RUN) {
+        executionState.currentNodeId = undefined;
+        break;
+      }
+      // Get outgoing edges for this node (exclude loop-back edges for forward flow)
+      // Sort edges to ensure consistent ordering (by target ID for deterministic behavior)
+      const forwardEdges = edges
+        .filter((e: any) => e.source === currentNode.id && !e.data?.isLoopBack)
+        .sort((a: any, b: any) => {
+          // Sort by sourceHandle first (true/false handles come first), then by target ID
+          if (a.sourceHandle === 'true') return -1;
+          if (b.sourceHandle === 'true') return 1;
+          if (a.sourceHandle === 'false') return -1;
+          if (b.sourceHandle === 'false') return 1;
+          return a.target.localeCompare(b.target);
+        });
+      const forwardTargets = forwardEdges.map((e: any) => e.target);
+
+      // Separate edges by source handle for conditional nodes (only forward edges)
+      const trueEdge = forwardEdges.find((e: any) => e.sourceHandle === 'true');
+      const falseEdge = forwardEdges.find((e: any) => e.sourceHandle === 'false');
+
+      // Loop Back node: next node is the loop-back target (selected node). Others: use first forward edge.
+      const loopBackEdge = edges.find(
+        (e: any) => e.source === currentNode.id && e.data?.isLoopBack === true
+      );
+      const outgoingNodeId =
+        (currentNode.type === 'jumpAnywhere' || currentNode.type === 'loopBack') && loopBackEdge
+          ? loopBackEdge.target
+          : (forwardTargets[0] || null);
+
       // Prepare node data with outgoing node info
       const nodeData = {
         ...currentNode.data,
-        outgoingNodeId: outgoingEdges[0] || null, // For simple nodes, take first edge
-        // For conditional nodes, they handle their own routing
-        trueNodeId: trueEdge || outgoingEdges[0] || null,
-        falseNodeId: falseEdge || outgoingEdges[1] || null,
-        intentNodeIds: this.buildIntentNodeMap(currentNode, outgoingEdges, edges),
+        outgoingNodeId,
+        trueNodeId: trueEdge?.target || null,
+        falseNodeId: falseEdge?.target || null,
+        intentNodeIds: this.buildIntentNodeMap(currentNode, forwardTargets, edges),
       };
 
       // Create execution context
@@ -399,10 +426,17 @@ export class AgentExecutionService {
         context: executionState.context || {},
         userInputs: executionState.userInputs || [], // Pass userInputs array so nodes can find their inputs
         allNodes: nodes, // Pass all nodes for variable resolution
+        runtime: {
+          consumedUserInputIndexes,
+          allowLoopBackInputReplay,
+          hasUsedLoopBackInputReplay,
+        },
       };
 
       // Execute node
       const result = await executeNode(execContext);
+      allowLoopBackInputReplay = Boolean(execContext.runtime?.allowLoopBackInputReplay);
+      hasUsedLoopBackInputReplay = Boolean(execContext.runtime?.hasUsedLoopBackInputReplay);
 
       // Collect messages
       if (result.messages) {
@@ -453,18 +487,39 @@ export class AgentExecutionService {
       }
 
       // Move to next node
-      if (result.nextNodeId) {
-        const nextNode = nodeMap.get(result.nextNodeId);
+      let nextNodeId: string | null = null;
+      
+      // For loopback nodes, always use the loopback target
+      if ((currentNode.type === 'jumpAnywhere' || currentNode.type === 'loopBack') && loopBackEdge) {
+        nextNodeId = loopBackEdge.target;
+        // Do not replay the same user input after loop-back.
+        // Loop targets should execute naturally (e.g., send message and wait again).
+        allowLoopBackInputReplay = false;
+        hasUsedLoopBackInputReplay = false;
+      } else {
+        // For other nodes, prefer result.nextNodeId but validate it's a valid forward target
+        // If result.nextNodeId is provided and is in forwardTargets, use it
+        // Otherwise, use the first forward target
+        if (result.nextNodeId && forwardTargets.includes(result.nextNodeId)) {
+          nextNodeId = result.nextNodeId;
+        } else if (forwardTargets.length > 0) {
+          // Use first forward target if result.nextNodeId is invalid or not provided
+          nextNodeId = forwardTargets[0];
+        } else {
+          // No forward edges, use result.nextNodeId as fallback (might be null)
+          nextNodeId = result.nextNodeId || null;
+        }
+      }
+      
+      if (nextNodeId) {
+        const nextNode = nodeMap.get(nextNodeId);
         if (!nextNode) {
-          throw new Error(`Next node ${result.nextNodeId} not found`);
+          throw new Error(`Next node ${nextNodeId} not found`);
         }
         currentNode = nextNode;
         currentInput = result.output;
-        // Update execution state to track current node
         executionState.currentNodeId = nextNode.id;
       } else {
-        // No next node, workflow completed
-        // Clear currentNodeId to indicate we've finished
         executionState.currentNodeId = undefined;
         break;
       }
@@ -473,7 +528,7 @@ export class AgentExecutionService {
     return {
       output: currentInput,
       messages,
-      nextNodeId: executionState.currentNodeId || null, // Return current node ID if workflow is still active
+      nextNodeId: executionState.currentNodeId || null,
     };
   }
 

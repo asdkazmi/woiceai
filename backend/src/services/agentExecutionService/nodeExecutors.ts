@@ -9,6 +9,11 @@ export interface NodeExecutionContext {
   context: Record<string, any>;
   userInputs: Array<{ nodeId: string; value: any }>;
   allNodes?: any[]; // All nodes in the workflow for variable resolution
+  runtime?: {
+    consumedUserInputIndexes: Set<number>;
+    allowLoopBackInputReplay?: boolean;
+    hasUsedLoopBackInputReplay?: boolean;
+  };
 }
 
 export interface NodeExecutionResult {
@@ -26,6 +31,82 @@ export interface NodeExecutionResult {
   }>;
   waitingForInput?: boolean;
   shouldRestart?: boolean;
+}
+
+function getLatestInputForNode(
+  userInputs: Array<{ nodeId: string; value: any }>,
+  nodeId: string
+): { nodeId: string; value: any } | undefined {
+  for (let i = userInputs.length - 1; i >= 0; i -= 1) {
+    if (userInputs[i].nodeId === nodeId) {
+      return userInputs[i];
+    }
+  }
+  return undefined;
+}
+
+function getLatestUnconsumedInputForNode(
+  userInputs: Array<{ nodeId: string; value: any }>,
+  nodeId: string,
+  consumedUserInputIndexes: Set<number>
+): { input: { nodeId: string; value: any }; index: number } | undefined {
+  if (userInputs.length === 0) return undefined;
+  const latestIndex = userInputs.length - 1;
+  if (consumedUserInputIndexes.has(latestIndex)) return undefined;
+  if (userInputs[latestIndex].nodeId === nodeId) {
+    return { input: userInputs[latestIndex], index: latestIndex };
+  }
+  return undefined;
+}
+
+function getLatestInputWithIndex(
+  userInputs: Array<{ nodeId: string; value: any }>
+): { input: { nodeId: string; value: any }; index: number } | undefined {
+  if (userInputs.length === 0) return undefined;
+  const latestIndex = userInputs.length - 1;
+  return { input: userInputs[latestIndex], index: latestIndex };
+}
+
+function getNodeInputForExecution(
+  userInputs: Array<{ nodeId: string; value: any }>,
+  nodeId: string,
+  runtime?: {
+    consumedUserInputIndexes: Set<number>;
+    allowLoopBackInputReplay?: boolean;
+    hasUsedLoopBackInputReplay?: boolean;
+  }
+): { input: { nodeId: string; value: any }; index: number; replayedFromLoopBack: boolean } | undefined {
+  const consumedUserInputIndexes = runtime?.consumedUserInputIndexes || new Set<number>();
+  const unconsumed = getLatestUnconsumedInputForNode(
+    userInputs,
+    nodeId,
+    consumedUserInputIndexes
+  );
+  if (unconsumed) {
+    return { ...unconsumed, replayedFromLoopBack: false };
+  }
+
+  // After a Loop Back / Jump Anywhere jump, allow one replay so upstream wait nodes can
+  // continue once with the current message instead of pausing immediately.
+  if (runtime?.allowLoopBackInputReplay && !runtime?.hasUsedLoopBackInputReplay) {
+    // Replay always uses the latest user turn input, regardless of target node id.
+    const latest = getLatestInputWithIndex(userInputs);
+    if (latest) {
+      return { ...latest, replayedFromLoopBack: true };
+    }
+  }
+
+  return undefined;
+}
+
+function shouldEchoUserInputInMessages(
+  userInputs: Array<{ nodeId: string; value: any }>,
+  inputIndex: number,
+  replayedFromLoopBack: boolean
+): boolean {
+  if (replayedFromLoopBack) return false;
+  // Only echo the latest submitted user input for this request flow.
+  return inputIndex === userInputs.length - 1;
 }
 
 /**
@@ -84,7 +165,7 @@ function resolveVariables(
       });
       if (targetNode) {
         // Find user input for this node's string ID
-        const input = userInputs.find((ui) => ui.nodeId === targetNode.id);
+        const input = getLatestInputForNode(userInputs, targetNode.id);
         if (input) {
           return String(input.value);
         }
@@ -92,7 +173,7 @@ function resolveVariables(
     }
     
     // Fallback: try matching by string ID directly
-    const input = userInputs.find((ui) => ui.nodeId === String(numericNodeId));
+    const input = getLatestInputForNode(userInputs, String(numericNodeId));
     return input ? String(input.value) : '';
   });
 
@@ -144,27 +225,54 @@ export async function executeChatAINode(
       : false;
 
   // Check if we already have input for this node (user has responded after Chat AI reply)
-  const existingInput = userInputs.find((ui) => ui.nodeId === context.nodeId);
+  const consumedUserInputIndexes =
+    context.runtime?.consumedUserInputIndexes || new Set<number>();
+  const consumedInput = getNodeInputForExecution(
+    userInputs,
+    context.nodeId,
+    context.runtime
+  );
 
   // If we have input, we've already sent the Chat AI response and received user input
   // So now we continue to the next node
-  if (waitForReply && existingInput) {
+  if (waitForReply && consumedInput) {
+    const shouldEchoUser = shouldEchoUserInputInMessages(
+      userInputs,
+      consumedInput.index,
+      consumedInput.replayedFromLoopBack
+    );
+    if (consumedInput.replayedFromLoopBack) {
+      if (context.runtime) {
+        context.runtime.hasUsedLoopBackInputReplay = true;
+        context.runtime.allowLoopBackInputReplay = false;
+      }
+    } else {
+      consumedUserInputIndexes.add(consumedInput.index);
+    }
     const nextNodeId = context.nodeData.outgoingNodeId || null;
     return {
-      output: existingInput.value,
+      output: consumedInput.input.value,
       nextNodeId,
-      messages: [
-        {
-          role: 'user',
-          content: String(existingInput.value),
-        },
-      ],
+      messages: shouldEchoUser
+        ? [
+            {
+              role: 'user',
+              content: String(consumedInput.input.value),
+            },
+          ]
+        : [],
     };
   }
 
   // We haven't received user input yet, so we need to call Chat AI and then pause
   const chatAIId = nodeData.chatAIId || (nodeData.data && typeof nodeData.data === 'object' && nodeData.data.chatAIId);
   const inputMessage = nodeData.inputMessage || (nodeData.data && typeof nodeData.data === 'object' && nodeData.data.inputMessage) || '';
+  const useChatHistory =
+    nodeData.useChatHistory !== undefined
+      ? Boolean(nodeData.useChatHistory)
+      : nodeData.data?.useChatHistory !== undefined
+      ? Boolean(nodeData.data.useChatHistory)
+      : false;
 
   if (!chatAIId) {
     throw new Error('Chat AI node is missing required configuration (chatAIId)');
@@ -177,16 +285,40 @@ export async function executeChatAINode(
 
   const knowledgeBaseId = chatAI.knowledgeBaseId;
 
+  const fullChatHistory = Array.isArray(execContext.context?.chatMessages)
+    ? execContext.context.chatMessages
+    : [];
+
   let query: string;
-  if (inputMessage && inputMessage.trim()) {
+  let history = useChatHistory ? fullChatHistory : (execContext.history || []);
+
+  if (useChatHistory && fullChatHistory.length > 0) {
+    const lastUserIndex = [...fullChatHistory]
+      .map((msg, idx) => ({ msg, idx }))
+      .reverse()
+      .find((item) => item.msg?.role === 'user')?.idx;
+
+    if (lastUserIndex !== undefined) {
+      const lastUserMessage = fullChatHistory[lastUserIndex];
+      query = String(lastUserMessage?.content ?? '');
+      history = fullChatHistory.slice(0, lastUserIndex);
+    } else {
+      query = typeof context.input === 'string' ? context.input : JSON.stringify(context.input);
+    }
+  } else if (!useChatHistory && inputMessage && inputMessage.trim()) {
     query = resolveVariables(inputMessage, userInputs || [], execContext || {}, allNodes);
   } else {
     query = typeof context.input === 'string' ? context.input : JSON.stringify(context.input);
   }
 
-  const history = execContext.history || [];
-
   try {
+    console.log('[ChatAI] Request payload', {
+      chatAIId,
+      useChatHistory,
+      query,
+      historyLength: Array.isArray(history) ? history.length : 0,
+      history,
+    });
     const response = await ChatAIService.chat(chatAIId, chatAI.userId, {
       query,
       history,
@@ -237,49 +369,116 @@ export async function executeChatAINode(
 }
 
 /**
+ * Build a readonly node map for condition evaluation: node[id].user.message, node[id].output.text
+ */
+function buildNodeMapForCondition(
+  allNodes: any[] | undefined,
+  userInputs: Array<{ nodeId: string; value: any }>,
+  nodeOutputs: Record<string, { text?: string }> | undefined
+): Record<number, { user: { message: string }; output: { text: string } }> {
+  const node: Record<number, { user: { message: string }; output: { text: string } }> = {};
+  if (!allNodes) return node;
+
+  const outputs = nodeOutputs || {};
+  for (const n of allNodes) {
+    const numericId = n.data?.nodeId ?? n.nodeId;
+    if (typeof numericId !== 'number') continue;
+
+    const userInput = getLatestInputForNode(userInputs, n.id);
+    const out = outputs[n.id];
+    node[numericId] = {
+      user: { message: userInput != null ? String(userInput.value) : '' },
+      output: { text: out?.text != null ? String(out.text) : '' },
+    };
+  }
+  return node;
+}
+
+/**
  * Execute an If/Else node
- * This node: Evaluates condition and routes to true/false branch
+ * No pause: evaluates immediately using latest user input. Variables: message, input, node[ID].user.message, node[ID].output.text
  */
 export async function executeIfElseNode(
   context: NodeExecutionContext
 ): Promise<NodeExecutionResult> {
-  const { nodeData, userInputs } = context;
+  const { nodeData, userInputs, context: execContext, allNodes, input: contextInput } = context;
+  const currentTurnInput = execContext?.currentTurnInput;
 
-  // Check if we already have input for this node (user has responded)
-  const existingInput = userInputs.find((ui) => ui.nodeId === context.nodeId);
-  
-  if (!existingInput) {
-    return {
-      waitingForInput: true,
-      output: '',
-      messages: [],
-    };
-  }
+  const existingInput = getLatestInputForNode(userInputs, context.nodeId);
+  const message = existingInput != null
+    ? String(existingInput.value ?? '')
+    : (
+      currentTurnInput !== undefined && currentTurnInput !== null
+        ? String(currentTurnInput)
+        : (userInputs.length > 0 ? String(userInputs[userInputs.length - 1].value) : String(contextInput ?? ''))
+    );
+  const input = message;
+  const user = {
+    input: {
+      latest:
+        userInputs.length > 0
+          ? String(userInputs[userInputs.length - 1].value ?? '')
+          : String(contextInput ?? ''),
+      first: userInputs.length > 0 ? String(userInputs[0].value ?? '') : String(contextInput ?? ''),
+    },
+  };
 
-  // Evaluate condition with the user-provided input
-  const condition = nodeData.condition || nodeData.data?.condition || '';
+  const condition = (nodeData.condition || nodeData.data?.condition || '').trim();
+
   let result = false;
 
-  try {
-    const message = existingInput.value;
-    result = Boolean(message && String(message).trim() !== '');
-  } catch (error) {
-    result = false;
+  if (!condition) {
+    result = message.trim() !== '';
+  } else {
+    try {
+      const node = buildNodeMapForCondition(
+        allNodes,
+        userInputs,
+        execContext?.nodeOutputs
+      );
+      const fn = new Function(
+        'message',
+        'input',
+        'node',
+        'user',
+        '"use strict"; return Boolean(' + condition + ');'
+      );
+      result = Boolean(fn(message, input, node, user));
+    } catch {
+      result = false;
+    }
   }
 
-  const nextNodeId = result 
+  const nextNodeId = result
     ? (context.nodeData.trueNodeId || null)
     : (context.nodeData.falseNodeId || null);
 
   return {
     output: result,
     nextNodeId,
-    messages: [
-      {
-        role: 'user',
-        content: String(existingInput.value),
-      },
-    ],
+    // If/Else is a control node; it should not emit user chat messages.
+    messages: [],
+  };
+}
+
+/**
+ * Execute a Loop Back node
+ * No pause: immediately jumps to the selected loop-back target.
+ */
+export async function executeJumpAnywhereNode(
+  context: NodeExecutionContext
+): Promise<NodeExecutionResult> {
+  const nextNodeId = context.nodeData.outgoingNodeId || null;
+  const jumpInput =
+    context.context?.currentTurnInput !== undefined &&
+    context.context?.currentTurnInput !== null
+      ? context.context.currentTurnInput
+      : context.input;
+  return {
+    // Restart traversal from the selected node with current turn input.
+    output: jumpInput,
+    nextNodeId,
+    messages: [],
   };
 }
 
@@ -298,8 +497,15 @@ export async function executeIntentRecognitionNode(
       ? Boolean(context.nodeData.data.waitForReply)
       : false;
 
-  const existingInput = userInputs.find((ui) => ui.nodeId === context.nodeId);
-  if (waitForReply && !existingInput) {
+  const consumedUserInputIndexes =
+    context.runtime?.consumedUserInputIndexes || new Set<number>();
+  const consumedInput = getNodeInputForExecution(
+    userInputs,
+    context.nodeId,
+    context.runtime
+  );
+
+  if (waitForReply && !consumedInput) {
     return {
       waitingForInput: true,
       output: '',
@@ -322,11 +528,31 @@ export async function executeIntentRecognitionNode(
     text: selectedIntent,
   };
 
+  const shouldEchoUser =
+    waitForReply && consumedInput
+      ? shouldEchoUserInputInMessages(
+          userInputs,
+          consumedInput.index,
+          consumedInput.replayedFromLoopBack
+        )
+      : false;
+
+  if (waitForReply && consumedInput) {
+    if (consumedInput.replayedFromLoopBack) {
+      if (context.runtime) {
+        context.runtime.hasUsedLoopBackInputReplay = true;
+        context.runtime.allowLoopBackInputReplay = false;
+      }
+    } else {
+      consumedUserInputIndexes.add(consumedInput.index);
+    }
+  }
+
   return {
     output: selectedIntent,
     nextNodeId,
-    messages: waitForReply && existingInput
-      ? [{ role: 'user', content: String(existingInput.value) }]
+    messages: waitForReply && consumedInput && shouldEchoUser
+      ? [{ role: 'user', content: String(consumedInput.input.value) }]
       : [],
   };
 }
@@ -346,18 +572,40 @@ export async function executeSendMessageNode(
       ? Boolean(nodeData.data.waitForReply)
       : false;
 
-  const existingInput = userInputs.find((ui) => ui.nodeId === context.nodeId);
-  if (waitForReply && existingInput) {
+  const consumedUserInputIndexes =
+    context.runtime?.consumedUserInputIndexes || new Set<number>();
+  const consumedInput = getNodeInputForExecution(
+    userInputs,
+    context.nodeId,
+    context.runtime
+  );
+
+  if (waitForReply && consumedInput) {
+    const shouldEchoUser = shouldEchoUserInputInMessages(
+      userInputs,
+      consumedInput.index,
+      consumedInput.replayedFromLoopBack
+    );
+    if (consumedInput.replayedFromLoopBack) {
+      if (context.runtime) {
+        context.runtime.hasUsedLoopBackInputReplay = true;
+        context.runtime.allowLoopBackInputReplay = false;
+      }
+    } else {
+      consumedUserInputIndexes.add(consumedInput.index);
+    }
     const nextNodeId = context.nodeData.outgoingNodeId || null;
     return {
-      output: existingInput.value,
+      output: consumedInput.input.value,
       nextNodeId,
-      messages: [
-        {
-          role: 'user',
-          content: String(existingInput.value),
-        },
-      ],
+      messages: shouldEchoUser
+        ? [
+            {
+              role: 'user',
+              content: String(consumedInput.input.value),
+            },
+          ]
+        : [],
     };
   }
 
@@ -416,11 +664,17 @@ export async function executeWaitForReplyNode(
   context: NodeExecutionContext
 ): Promise<NodeExecutionResult> {
   const { nodeData, userInputs } = context;
+  const consumedUserInputIndexes =
+    context.runtime?.consumedUserInputIndexes || new Set<number>();
 
-  // Check if we already have input for this node
-  const existingInput = userInputs.find((ui) => ui.nodeId === context.nodeId);
+  // Check if we have an unconsumed input. After a loop-back jump, one replay is allowed.
+  const consumedInput = getNodeInputForExecution(
+    userInputs,
+    context.nodeId,
+    context.runtime
+  );
   
-  if (!existingInput) {
+  if (!consumedInput) {
     // We're waiting for user input - no message sent, just pause
     return {
       waitingForInput: true,
@@ -430,17 +684,32 @@ export async function executeWaitForReplyNode(
   }
 
   // We have the input, continue to next node
+  const shouldEchoUser = shouldEchoUserInputInMessages(
+    userInputs,
+    consumedInput.index,
+    consumedInput.replayedFromLoopBack
+  );
+  if (consumedInput.replayedFromLoopBack) {
+    if (context.runtime) {
+      context.runtime.hasUsedLoopBackInputReplay = true;
+      context.runtime.allowLoopBackInputReplay = false;
+    }
+  } else {
+    consumedUserInputIndexes.add(consumedInput.index);
+  }
   const nextNodeId = context.nodeData.outgoingNodeId || null;
 
   return {
-    output: existingInput.value,
+    output: consumedInput.input.value,
     nextNodeId,
-    messages: [
-      {
-        role: 'user',
-        content: String(existingInput.value),
-      },
-    ],
+    messages: shouldEchoUser
+      ? [
+          {
+            role: 'user',
+            content: String(consumedInput.input.value),
+          },
+        ]
+      : [],
   };
 }
 
@@ -479,6 +748,10 @@ export async function executeNode(
       return executeSendMessageNode(context);
     case 'ifElse':
       return executeIfElseNode(context);
+    case 'jumpAnywhere':
+      return executeJumpAnywhereNode(context);
+    case 'loopBack':
+      return executeJumpAnywhereNode(context);
     case 'intentRecognition':
       return executeIntentRecognitionNode(context);
     case 'end':

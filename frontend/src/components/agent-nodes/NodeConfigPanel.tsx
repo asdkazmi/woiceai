@@ -20,6 +20,7 @@ interface VariableTextareaProps {
   rows?: number;
   placeholder?: string;
   className?: string;
+  readOnly?: boolean;
 }
 
 const VariableTextarea: React.FC<VariableTextareaProps> = ({
@@ -29,6 +30,7 @@ const VariableTextarea: React.FC<VariableTextareaProps> = ({
   rows = 3,
   placeholder,
   className,
+  readOnly = false,
 }) => {
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -61,6 +63,7 @@ const VariableTextarea: React.FC<VariableTextareaProps> = ({
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (readOnly) return;
     const nextValue = e.target.value;
     onChange(nextValue);
     updateSuggestions(nextValue, e.target.selectionStart ?? nextValue.length);
@@ -94,6 +97,7 @@ const VariableTextarea: React.FC<VariableTextareaProps> = ({
         className={className}
         rows={rows}
         placeholder={placeholder}
+        readOnly={readOnly}
       />
       {isOpen && (
         <div className="absolute z-20 mt-1 w-full max-h-48 overflow-auto rounded-sm border border-gray-200 bg-white shadow-sm">
@@ -302,12 +306,29 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({
                 value={(node.data?.inputMessage as string | undefined) || ''}
                 onChange={(value) => onUpdate({ inputMessage: value })}
                 variables={availableVariables}
-                className="w-full px-3 py-2 border border-gray-200 rounded-sm text-sm focus:border-primary focus:ring-1 focus:ring-primary"
+                className={`w-full px-3 py-2 border border-gray-200 rounded-sm text-sm focus:border-primary focus:ring-1 focus:ring-primary ${
+                  node.data?.useChatHistory ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''
+                }`}
                 rows={3}
                 placeholder="e.g., {{user.input.latest}} or Custom message with variables"
+                readOnly={Boolean(node.data?.useChatHistory)}
               />
               <p className="text-xs text-gray-500 mt-1">
                 You can use variables like <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{'{{user.input.latest}}'}</code>, <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{'{{user.input.first}}'}</code>, <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{'{{node[ID].user.message}}'}</code>, or <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{'{{node[ID].output.text}}'}</code>
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(node.data?.useChatHistory)}
+                  onChange={(e) => onUpdate({ useChatHistory: e.target.checked })}
+                  className="rounded-sm border-gray-300 text-primary focus:ring-primary"
+                />
+                <span>Use full chat history as input</span>
+              </label>
+              <p className="text-xs text-gray-500">
+                When enabled, the input message is ignored and the full session history is sent to Chat AI.
               </p>
             </div>
             <div className="space-y-3">
@@ -351,10 +372,10 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({
                 type="text"
                 value={(node.data?.condition as string | undefined) || ''}
                 onChange={(e) => onUpdate({ condition: e.target.value })}
-                placeholder="e.g., message.length > 10"
+                placeholder="e.g., node[7].user.message == 'hi'"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Use JavaScript-like expressions. Variables: input, message
+                Use JavaScript-like expressions. Variables: <code className="text-xs bg-gray-100 px-1 rounded">message</code> (this node&apos;s user input), <code className="text-xs bg-gray-100 px-1 rounded">input</code>, <code className="text-xs bg-gray-100 px-1 rounded">node[ID].user.message</code>, <code className="text-xs bg-gray-100 px-1 rounded">node[ID].output.text</code> (use node ID from the builder).
               </p>
             </div>
           </div>
@@ -540,6 +561,15 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({
           </div>
         );
 
+      case 'loopBack':
+        return (
+          <div className="space-y-4">
+            <div className="text-sm text-gray-600">
+              <p>This node creates a loop back connection to an earlier node in the workflow. Click this node on the canvas to choose which node to loop back to. The loop back connection is shown in light orange.</p>
+            </div>
+          </div>
+        );
+
       default:
         return <p className="text-sm text-gray-500">No configuration available</p>;
     }
@@ -554,6 +584,7 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({
       ifElse: 'If/Else',
       intentRecognition: 'Intent Recognition',
       end: 'End',
+      loopBack: 'Loop Back',
     };
     return labels[type] || type;
   };

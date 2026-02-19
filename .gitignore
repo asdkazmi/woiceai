@@ -35,4 +35,5 @@ backend/*.log
 frontend/build/
 frontend/.pnp
 frontend/.pnp.js
-
+package-lock.json
+google-oauth-credentials.json

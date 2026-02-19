@@ -31,8 +31,10 @@ import SendMessageNode from './agent-nodes/SendMessageNode';
 import WaitForReplyNode from './agent-nodes/WaitForReplyNode';
 import EndNode from './agent-nodes/EndNode';
 import PlaceholderNode from './agent-nodes/PlaceholderNode';
+import LoopBackNode from './agent-nodes/LoopBackNode';
 import NodeConfigPanel from './agent-nodes/NodeConfigPanel';
 import AddNodeEdge from './edges/AddNodeEdge';
+import LoopBackEdge from './edges/LoopBackEdge';
 
 // Define nodeTypes outside component to prevent recreation on every render
 const nodeTypes: NodeTypes = {
@@ -44,10 +46,12 @@ const nodeTypes: NodeTypes = {
   sendMessage: SendMessageNode,
   end: EndNode,
   placeholder: PlaceholderNode,
+  loopBack: LoopBackNode,
 };
 
 const edgeTypes = {
   addNode: AddNodeEdge,
+  loopBack: LoopBackEdge,
 };
 
 const initialNodeId = 1;
@@ -140,9 +144,12 @@ const repositionNodesVertically = (nodes: Node[], edges: Edge[]): Node[] => {
   const startNode = nodes.find((n) => n.id === 'node-start' || n.type === 'start');
   if (!startNode) return nodes;
 
-  // Build outgoing map
+  // Exclude loop-back edges from layout (they go backward and should not affect positioning)
+  const layoutEdges = edges.filter((e) => !(e.data as any)?.isLoopBack);
+
+  // Build outgoing map from non-loop-back edges only
   const outgoingMap = new Map<string, Edge[]>();
-  edges.forEach((e) => {
+  layoutEdges.forEach((e) => {
     if (!outgoingMap.has(e.source)) outgoingMap.set(e.source, []);
     outgoingMap.get(e.source)!.push(e);
   });
@@ -249,7 +256,9 @@ const AgentBuilderInner: React.FC = () => {
   const [showDeleteBranchModal, setShowDeleteBranchModal] = useState(false);
   const [deleteBranchNodeId, setDeleteBranchNodeId] = useState<string | null>(null);
   const [deleteBranchChoice, setDeleteBranchChoice] = useState<'true' | 'false' | null>(null);
-  
+  const [showLoopBackModal, setShowLoopBackModal] = useState(false);
+  const [loopBackSourceNodeId, setLoopBackSourceNodeId] = useState<string | null>(null);
+
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
@@ -447,7 +456,9 @@ const AgentBuilderInner: React.FC = () => {
           target: e.target,
           sourceHandle: e.sourceHandle || 'source',
           targetHandle: e.targetHandle || null,
-          type: 'addNode', // Custom edge with add-node icon
+          type: e.data?.isLoopBack ? 'loopBack' : 'addNode',
+          data: e.data || {},
+          style: e.data?.isLoopBack ? { stroke: '#fdba74', strokeWidth: 2 } : e.style,
         }));
         
         // Reposition all nodes to ensure vertical alignment with fixed spacing
@@ -496,6 +507,11 @@ const AgentBuilderInner: React.FC = () => {
     // Switch to configuration tab when clicking on a node
     setActiveTab('config');
     setSelectedNode(node);
+    // If Loop Back node is clicked, open the loop-back target selection modal
+    if (node.type === 'loopBack') {
+      setLoopBackSourceNodeId(node.id);
+      setShowLoopBackModal(true);
+    }
   }, []);
 
   const onPaneClick = useCallback(() => {
@@ -680,22 +696,20 @@ const AgentBuilderInner: React.FC = () => {
     // Find edges connected to this node
     const incomingEdges = edges.filter((e) => e.target === nodeId);
     const outgoingEdges = edges.filter((e) => e.source === nodeId);
-    
-    // Reconnect: if A -> B -> C and we delete B, connect A -> C
+    // Only reconnect using non-loop-back outgoing edges (so deleting Loop Back doesn't connect parent to loop-back target)
+    const outgoingEdgesForReconnect = outgoingEdges.filter((e) => !(e.data as any)?.isLoopBack);
+
     const newEdges: Edge[] = [];
-    
-    // Keep edges not connected to the deleted node
+
     edges.forEach((edge) => {
       if (edge.source !== nodeId && edge.target !== nodeId) {
         newEdges.push(edge);
       }
     });
-    
-    // Reconnect incoming to outgoing
+
+    // Reconnect incoming to outgoing (only forward edges; skip loop-back)
     incomingEdges.forEach((incomingEdge) => {
-      outgoingEdges.forEach((outgoingEdge) => {
-        // Create new edge from source of incoming to target of outgoing
-        // But only if they're not the same node and edge doesn't already exist
+      outgoingEdgesForReconnect.forEach((outgoingEdge) => {
         if (incomingEdge.source !== outgoingEdge.target) {
           const edgeExists = newEdges.some(
             (e) => e.source === incomingEdge.source && e.target === outgoingEdge.target
@@ -728,6 +742,37 @@ const AgentBuilderInner: React.FC = () => {
       setSelectedNode(null);
     }
   };
+
+  const handleLoopBackTargetSelect = useCallback(
+    (targetNodeId: string) => {
+      if (!loopBackSourceNodeId) return;
+      setEdges((eds) => {
+        const withoutExistingLoopBack = eds.filter(
+          (e) =>
+            !(
+              e.source === loopBackSourceNodeId &&
+              (e.data as any)?.isLoopBack === true
+            )
+        );
+        const incomingEdge = eds.find((e) => e.target === loopBackSourceNodeId);
+        const branch =
+          incomingEdge?.sourceHandle === 'false' ? 'false' : 'true';
+        const newEdge: Edge = {
+          id: `edge-loopback-${loopBackSourceNodeId}-${targetNodeId}`,
+          source: loopBackSourceNodeId,
+          target: targetNodeId,
+          sourceHandle: 'source',
+          targetHandle: null,
+          type: 'loopBack',
+          data: { isLoopBack: true, branch },
+        };
+        return [...withoutExistingLoopBack, newEdge];
+      });
+      setShowLoopBackModal(false);
+      setLoopBackSourceNodeId(null);
+    },
+    [loopBackSourceNodeId, setEdges]
+  );
 
   const handleDeleteBranchConfirm = () => {
     if (!deleteBranchNodeId || !deleteBranchChoice) return;
@@ -884,6 +929,8 @@ const AgentBuilderInner: React.FC = () => {
           target: edge.target,
           sourceHandle: edge.sourceHandle || null,
           targetHandle: edge.targetHandle || null,
+          data: edge.data || null,
+          style: edge.style || null,
         })),
       };
 
@@ -927,6 +974,7 @@ const AgentBuilderInner: React.FC = () => {
           passContext: true,
           sendOutput: true,
           waitForReply: false,
+          useChatHistory: false,
         };
       case 'waitForReply':
         return {};
@@ -951,6 +999,8 @@ const AgentBuilderInner: React.FC = () => {
         return {
           finalMessage: 'Workflow completed.',
         };
+      case 'loopBack':
+        return {};
       default:
         return {};
     }
@@ -1029,9 +1079,9 @@ const AgentBuilderInner: React.FC = () => {
     
     // Find all nodes that need placeholders
     nodes.forEach((node) => {
-      // Skip end nodes, placeholder nodes, and nodes without type
-      if (!node.type || node.type === 'end' || node.type === 'placeholder') return;
-      
+// Skip end nodes, placeholder nodes, loopBack (no node after it), and nodes without type
+      if (!node.type || node.type === 'end' || node.type === 'placeholder' || node.type === 'loopBack') return;
+
       const sourceHandles = getSourceHandles(node.type);
       const nodeWidth = widthMemo.get(node.id) ?? 1;
       const nodeLeft = node.position.x - widthToSpan(nodeWidth) / 2;
@@ -1044,10 +1094,13 @@ const AgentBuilderInner: React.FC = () => {
       const trueCenter = nodeLeft + trueSpan / 2;
       const falseCenter = nodeLeft + trueSpan + BRANCH_GAP + falseSpan / 2;
       
-      // For each source handle, check if it has an outgoing edge
+      // For each source handle, check if it has an outgoing edge (exclude loop-back edges)
       sourceHandles.forEach((handle) => {
         const hasConnection = edges.some(
-          (e) => e.source === node.id && (e.sourceHandle === handle.id || (handle.id === 'source' && !e.sourceHandle))
+          (e) =>
+            e.source === node.id &&
+            (e.sourceHandle === handle.id || (handle.id === 'source' && !e.sourceHandle)) &&
+            !(e.data as any)?.isLoopBack
         );
         
         if (!hasConnection) {
@@ -1141,16 +1194,20 @@ const AgentBuilderInner: React.FC = () => {
 
   const renderEdges = useMemo(
     () =>
-      edges.map((edge) => ({
-        ...edge,
-        type: edge.type || 'addNode',
-        data: {
-          ...(edge.data || {}),
-          onInsert: handleInsertNodeBetween,
-          sourceHandle: edge.sourceHandle,
-          targetHandle: edge.targetHandle,
-        },
-      })),
+      edges.map((edge) => {
+        const isLoopBack = (edge.data as any)?.isLoopBack === true;
+        return {
+          ...edge,
+          type: isLoopBack ? 'loopBack' : (edge.type || 'addNode'),
+          data: {
+            ...(edge.data || {}),
+            onInsert: isLoopBack ? undefined : handleInsertNodeBetween,
+            sourceHandle: edge.sourceHandle,
+            targetHandle: edge.targetHandle,
+            showAddButton: isLoopBack ? false : undefined,
+          },
+        };
+      }),
     [edges, handleInsertNodeBetween]
   );
 
@@ -1229,6 +1286,20 @@ const AgentBuilderInner: React.FC = () => {
     edges: edges,
   };
 
+  const getNodeTypeLabel = (type: string): string => {
+    const labels: Record<string, string> = {
+      start: 'Start',
+      chatAI: 'Chat AI',
+      waitForReply: 'Wait for Reply',
+      sendMessage: 'Send Message',
+      ifElse: 'If/Else',
+      intentRecognition: 'Intent Recognition',
+      end: 'End',
+      loopBack: 'Loop Back',
+    };
+    return labels[type] || type;
+  };
+
   const nodeTypeOptions = [
     { type: 'chatAI', label: 'Chat AI' },
     { type: 'waitForReply', label: 'Wait for Reply' },
@@ -1236,6 +1307,10 @@ const AgentBuilderInner: React.FC = () => {
     { type: 'ifElse', label: 'If/Else' },
     { type: 'intentRecognition', label: 'Intent Recognition' },
     { type: 'end', label: 'End' },
+    // Loop Back only available when adding after if/else true/false branch
+    ...(sourceHandleForConnection === 'true' || sourceHandleForConnection === 'false'
+      ? [{ type: 'loopBack' as const, label: 'Loop Back' }]
+      : []),
   ];
 
   return (
@@ -1309,7 +1384,7 @@ const AgentBuilderInner: React.FC = () => {
             >
               <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
               <Controls />
-              <MiniMap />
+              <MiniMap style={{ display: 'none' }} />
             </ReactFlow>
           </div>
         </div>
@@ -1456,6 +1531,51 @@ const AgentBuilderInner: React.FC = () => {
                   <span className="font-medium text-gray-800">{option.label}</span>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loop Back Target Selection Modal */}
+      {showLoopBackModal && loopBackSourceNodeId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Loop back to node</h3>
+              <button
+                onClick={() => {
+                  setShowLoopBackModal(false);
+                  setLoopBackSourceNodeId(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Select the node you want to loop back to. The connection will be shown in light orange.
+            </p>
+            <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+              {nodes
+                .filter(
+                  (n) =>
+                    n.type !== 'placeholder' &&
+                    n.id !== loopBackSourceNodeId
+                )
+                .map((node) => {
+                  const label = getNodeTypeLabel(node.type || '');
+                  const nodeId = typeof node.data?.nodeId === 'number' ? node.data.nodeId : node.id;
+                  return (
+                    <button
+                      key={node.id}
+                      onClick={() => handleLoopBackTargetSelect(node.id)}
+                      className="w-full px-4 py-3 text-left border border-gray-200 rounded-md hover:bg-sky-50 hover:border-sky-300 transition-colors"
+                    >
+                      <span className="font-medium text-gray-800">{label}</span>
+                      <span className="text-xs text-gray-500 ml-2">(ID: {nodeId})</span>
+                    </button>
+                  );
+                })}
             </div>
           </div>
         </div>

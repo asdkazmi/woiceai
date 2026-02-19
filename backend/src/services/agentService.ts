@@ -171,11 +171,14 @@ export class AgentService {
   }
 
   /**
-   * Basic cycle detection (DFS)
+   * Basic cycle detection (DFS).
+   * Loop-back edges (data.isLoopBack) are excluded so intentional loop-back connections are allowed.
    */
   private static validateNoCycles(nodes: any[], edges: any[]): void {
     const startNode = nodes.find((n: any) => n.type === 'start');
     if (!startNode) return;
+
+    const acyclicEdges = edges.filter((e: any) => !e.data?.isLoopBack);
 
     const visited = new Set<string>();
     const recursionStack = new Set<string>();
@@ -191,8 +194,7 @@ export class AgentService {
       visited.add(nodeId);
       recursionStack.add(nodeId);
 
-      // Get all outgoing edges from this node
-      const outgoingEdges = edges.filter((e: any) => e.source === nodeId);
+      const outgoingEdges = acyclicEdges.filter((e: any) => e.source === nodeId);
       for (const edge of outgoingEdges) {
         if (hasCycle(edge.target)) {
           return true;
