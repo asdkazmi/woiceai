@@ -57,7 +57,7 @@ const edgeTypes = {
 const initialNodeId = 1;
 const VERTICAL_SPACING = 200; // Consistent vertical distance regardless of node height
 const NODE_WIDTH = 200; // Base horizontal unit
-const BRANCH_GAP = 5; // Small extra gap between expanding branches
+const BRANCH_GAP = 80; // Gap between true and false branches of if/else nodes
 const HORIZONTAL_CENTER = 400;
 const NODE_X_POSITION = HORIZONTAL_CENTER - NODE_WIDTH / 2;
 
@@ -256,8 +256,6 @@ const AgentBuilderInner: React.FC = () => {
   const [showDeleteBranchModal, setShowDeleteBranchModal] = useState(false);
   const [deleteBranchNodeId, setDeleteBranchNodeId] = useState<string | null>(null);
   const [deleteBranchChoice, setDeleteBranchChoice] = useState<'true' | 'false' | null>(null);
-  const [showLoopBackModal, setShowLoopBackModal] = useState(false);
-  const [loopBackSourceNodeId, setLoopBackSourceNodeId] = useState<string | null>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -507,11 +505,6 @@ const AgentBuilderInner: React.FC = () => {
     // Switch to configuration tab when clicking on a node
     setActiveTab('config');
     setSelectedNode(node);
-    // If Loop Back node is clicked, open the loop-back target selection modal
-    if (node.type === 'loopBack') {
-      setLoopBackSourceNodeId(node.id);
-      setShowLoopBackModal(true);
-    }
   }, []);
 
   const onPaneClick = useCallback(() => {
@@ -745,7 +738,8 @@ const AgentBuilderInner: React.FC = () => {
 
   const handleLoopBackTargetSelect = useCallback(
     (targetNodeId: string) => {
-      if (!loopBackSourceNodeId) return;
+      if (!selectedNode || selectedNode.type !== 'loopBack') return;
+      const loopBackSourceNodeId = selectedNode.id;
       setEdges((eds) => {
         const withoutExistingLoopBack = eds.filter(
           (e) =>
@@ -768,10 +762,8 @@ const AgentBuilderInner: React.FC = () => {
         };
         return [...withoutExistingLoopBack, newEdge];
       });
-      setShowLoopBackModal(false);
-      setLoopBackSourceNodeId(null);
     },
-    [loopBackSourceNodeId, setEdges]
+    [selectedNode, setEdges]
   );
 
   const handleDeleteBranchConfirm = () => {
@@ -1447,6 +1439,9 @@ const AgentBuilderInner: React.FC = () => {
                     onDelete={() => handleDeleteNode(selectedNode.id)}
                     isStartNode={selectedNode.id === 'node-start'}
                     availableVariables={availableVariables.map((variable) => variable.key)}
+                    allNodes={nodes}
+                    allEdges={edges}
+                    onLoopBackTargetSelect={(targetNodeId) => handleLoopBackTargetSelect(targetNodeId)}
                   />
                 ) : (
                   <div className="text-center text-gray-500 py-12">
@@ -1531,51 +1526,6 @@ const AgentBuilderInner: React.FC = () => {
                   <span className="font-medium text-gray-800">{option.label}</span>
                 </button>
               ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Loop Back Target Selection Modal */}
-      {showLoopBackModal && loopBackSourceNodeId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Loop back to node</h3>
-              <button
-                onClick={() => {
-                  setShowLoopBackModal(false);
-                  setLoopBackSourceNodeId(null);
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Select the node you want to loop back to. The connection will be shown in light orange.
-            </p>
-            <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
-              {nodes
-                .filter(
-                  (n) =>
-                    n.type !== 'placeholder' &&
-                    n.id !== loopBackSourceNodeId
-                )
-                .map((node) => {
-                  const label = getNodeTypeLabel(node.type || '');
-                  const nodeId = typeof node.data?.nodeId === 'number' ? node.data.nodeId : node.id;
-                  return (
-                    <button
-                      key={node.id}
-                      onClick={() => handleLoopBackTargetSelect(node.id)}
-                      className="w-full px-4 py-3 text-left border border-gray-200 rounded-md hover:bg-sky-50 hover:border-sky-300 transition-colors"
-                    >
-                      <span className="font-medium text-gray-800">{label}</span>
-                      <span className="text-xs text-gray-500 ml-2">(ID: {nodeId})</span>
-                    </button>
-                  );
-                })}
             </div>
           </div>
         </div>

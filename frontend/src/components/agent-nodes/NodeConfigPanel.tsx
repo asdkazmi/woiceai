@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Node } from '@xyflow/react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Node, Edge } from '@xyflow/react';
 import { Trash2 } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -11,6 +11,9 @@ interface NodeConfigPanelProps {
   onDelete: () => void;
   isStartNode?: boolean;
   availableVariables?: string[];
+  allNodes?: Node[];
+  allEdges?: Edge[];
+  onLoopBackTargetSelect?: (targetNodeId: string) => void;
 }
 
 interface VariableTextareaProps {
@@ -123,6 +126,9 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({
   onDelete,
   isStartNode = false,
   availableVariables = [],
+  allNodes = [],
+  allEdges = [],
+  onLoopBackTargetSelect,
 }) => {
   const [publishedChatAIs, setPublishedChatAIs] = useState<ChatAI[]>([]);
   const [loadingChatAIs, setLoadingChatAIs] = useState(false);
@@ -164,6 +170,44 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({
       setLoadingChatAIs(false);
     }
   };
+
+  // Compute nodes in same branch for Loop Back node (only when node type is loopBack)
+  const loopBackNodesInSameBranch = useMemo(() => {
+    if (node.type !== 'loopBack') return new Set<string>();
+    
+    const incomingEdge = allEdges.find((e) => e.target === node.id);
+    const loopBackBranch = incomingEdge?.sourceHandle === 'false' ? 'false' : 'true';
+    const parentIfElseNodeId = (incomingEdge?.sourceHandle === 'true' || incomingEdge?.sourceHandle === 'false') 
+      ? incomingEdge.source 
+      : null;
+    
+    if (!parentIfElseNodeId) return new Set<string>();
+    
+    const visited = new Set<string>();
+    const queue: string[] = [];
+    
+    const branchStartEdge = allEdges.find(
+      (e) => e.source === parentIfElseNodeId && e.sourceHandle === loopBackBranch
+    );
+    if (branchStartEdge) {
+      queue.push(branchStartEdge.target);
+    }
+
+    while (queue.length > 0) {
+      const nodeId = queue.shift()!;
+      if (visited.has(nodeId)) continue;
+      visited.add(nodeId);
+      
+      allEdges
+        .filter((e) => e.source === nodeId && !(e.data as any)?.isLoopBack)
+        .forEach((e) => {
+          if (!visited.has(e.target)) {
+            queue.push(e.target);
+          }
+        });
+    }
+    return visited;
+  }, [node.type, node.id, allEdges]);
 
   const selectedChatAI = publishedChatAIs.find(cai => cai.id === node.data?.chatAIId);
   
@@ -561,14 +605,89 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({
           </div>
         );
 
-      case 'loopBack':
+      case 'loopBack': {
+        const getNodeTypeLabel = (type: string): string => {
+          const labels: Record<string, string> = {
+            start: 'Start',
+            chatAI: 'Chat AI',
+            waitForReply: 'Wait for Reply',
+            sendMessage: 'Send Message',
+            ifElse: 'If/Else',
+            intentRecognition: 'Intent Recognition',
+            end: 'End',
+            loopBack: 'Loop Back',
+          };
+          return labels[type] || type;
+        };
+
+        // Find the current loop-back target (if any)
+        const currentLoopBackEdge = allEdges.find(
+          (e) => e.source === node.id && (e.data as any)?.isLoopBack === true
+        );
+        const currentTargetId = currentLoopBackEdge?.target;
+
+        // Find the parent if/else node (if this Loop Back is in an if/else branch)
+        const incomingEdge = allEdges.find((e) => e.target === node.id);
+        const parentIfElseNodeId = (incomingEdge?.sourceHandle === 'true' || incomingEdge?.sourceHandle === 'false')
+          ? incomingEdge.source
+          : null;
+
+        // Filter available nodes: exclude start, end, waitForReply, this node, parent if/else, and nodes in same branch
+        const availableNodes = allNodes.filter((n) => {
+          if (n.type === 'start' || n.type === 'end' || n.type === 'waitForReply') return false;
+          if (n.id === node.id) return false;
+          if (n.type === 'placeholder') return false;
+          if (parentIfElseNodeId && n.id === parentIfElseNodeId) return false; // Cannot loop back to own parent if/else
+          if (loopBackNodesInSameBranch.has(n.id)) return false;
+          return true;
+        });
+
         return (
           <div className="space-y-4">
             <div className="text-sm text-gray-600">
-              <p>This node creates a loop back connection to an earlier node in the workflow. Click this node on the canvas to choose which node to loop back to. The loop back connection is shown in light orange.</p>
+              <p>Select a node to loop back to. The loop back connection is shown in light orange.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Loop Back To Node
+              </label>
+              <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded-md p-2">
+                {availableNodes.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">No nodes available</p>
+                ) : (
+                  availableNodes.map((targetNode) => {
+                    const label = getNodeTypeLabel(targetNode.type || '');
+                    const nodeId = typeof targetNode.data?.nodeId === 'number' ? targetNode.data.nodeId : targetNode.id;
+                    const isSelected = currentTargetId === targetNode.id;
+                    
+                    return (
+                      <button
+                        key={targetNode.id}
+                        onClick={() => onLoopBackTargetSelect?.(targetNode.id)}
+                        className={`w-full px-4 py-3 text-left border rounded-md transition-colors ${
+                          isSelected
+                            ? 'border-sky-500 bg-sky-50 text-sky-900'
+                            : 'border-gray-200 hover:bg-gray-50 hover:border-sky-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-medium text-gray-800">{label}</span>
+                            <span className="text-xs text-gray-500 ml-2">(ID: {nodeId})</span>
+                          </div>
+                          {isSelected && (
+                            <span className="text-xs text-sky-600 font-medium">Selected</span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
         );
+      }
 
       default:
         return <p className="text-sm text-gray-500">No configuration available</p>;
