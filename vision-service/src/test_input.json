@@ -1,6 +1,11 @@
 {
     "input": {
-        "url":"https://videos.pexels.com/video-files/8290926/8290926-sd_960_540_30fps.mp4",
-        "type": "video"
+        "s3_key":"knowledge-bases/BVESqavjBm9BqeAE6CKT39eHJHhl42DUa2wqzObN.png",
+        "content_type": "image",
+        "kbId": "903",
+        "title": "test1",
+        "mongodb_srv": "mongodb://localhost:27017/example",
+        "unique_id": "903",
+        "customdb_name": "woice-explain-vid"
     }
 }
