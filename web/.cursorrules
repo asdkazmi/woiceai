@@ -1,0 +1,25 @@
+# Cursor Rules for Woice AI React + Express Application
+
+## Project Structure
+- Frontend: React TypeScript application in `/frontend`
+- Backend: Express.js TypeScript application in `/backend`
+
+## Code Style
+- Use TypeScript for type safety
+- Follow React best practices (functional components, hooks)
+- Use async/await for async operations
+- Use meaningful variable and function names
+
+## File Organization
+- Components in `frontend/src/components/`
+- Services/API calls in `frontend/src/services/`
+- Backend routes in `backend/src/routes/`
+- Backend models in `backend/src/models/`
+- Backend middleware in `backend/src/middleware/`
+
+## Best Practices
+- Always validate user input (frontend and backend)
+- Use environment variables for configuration
+- Handle errors gracefully
+- Use TypeScript interfaces for type definitions
+
