@@ -34,7 +34,7 @@ In **woiceai-ai**, use the branch corresponding to the service:
 
 | Branch | Purpose |
 | --- | --- |
-| [`chat-all-models`](https://github.com/asdkazmi/woiceai-ai/tree/chat-all-models) | Primary RunPod chat, embedding, and retrieval backend. Its build context is `chat-with-all-models/`. |
+| [`chat-all-models`](https://github.com/asdkazmi/woiceai-ai/tree/chat-all-models) | Primary RunPod chat, embedding, and retrieval backend. Its build context is `chat-service/`. |
 | [`dev-woiceai-kb`](https://github.com/asdkazmi/woiceai-ai/tree/dev-woiceai-kb) | AWS Lambda knowledge-base worker for document processing, media dispatch, indexing, and deletion. |
 | [`dev-scrapper`](https://github.com/asdkazmi/woiceai-ai/tree/dev-scrapper) | AWS Lambda website scraper used for page extraction and depth-based crawling. |
 | [`dev-woiceai-chat`](https://github.com/asdkazmi/woiceai-ai/tree/dev-woiceai-chat) | Legacy/compatibility chat service, still referenced by the current web source for third-party model connectors and API-key validation. |
