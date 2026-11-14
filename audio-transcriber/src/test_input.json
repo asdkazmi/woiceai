@@ -1,0 +1,11 @@
+{
+  "input": {
+    "s3_key" : "knowledge-bases/kiozYdMbRBNwv6lbizEEZRFv8UxExy88AApKamLl.wav",
+    "kbId" : "44",
+    "content_type" : "audio",
+    "diarization" : false,
+    "title": "Cartoon.mp4",
+    "mongodb_srv": "mongodb://localhost:27017/example",
+    "unique_id": "123"
+  }
+}
