@@ -18,28 +18,16 @@ Visit the complete **[WoiceAI Documentation](https://woiceai.github.io/)** for:
 
 You can also [browse the documentation directly on GitHub](https://github.com/woiceai/woiceai.github.io).
 
-## Source repositories
+## Services
 
-| Repository | Purpose |
+| Folder | Purpose |
 | --- | --- |
-| [woiceai-web](https://github.com/asdkazmi/woiceai-web) | React frontend and Express backend: authentication, knowledge-base management, assistant configuration, chat, connectors, and the visual workflow builder. |
-| [woiceai-ai](https://github.com/asdkazmi/woiceai-ai) | Core AI services: document ingestion, website crawling, indexing, retrieval, and the RunPod chat and embedding backend. Services are maintained on separate branches. |
-| [woiceai-transcriber](https://github.com/asdkazmi/woiceai-transcriber) | RunPod audio transcription service, including optional speaker diarization and transcript indexing. |
-| [woiceai-vision](https://github.com/asdkazmi/woiceai-vision) | RunPod image and video processing: visual explanations, sampled scene descriptions, video speech transcription, and knowledge-base indexing. |
-| [woiceai.github.io](https://github.com/woiceai/woiceai.github.io) | Central documentation, deployment guides, configuration templates, and operational references. |
-
-### AI service branches
-
-In **woiceai-ai**, use the branch corresponding to the service:
-
-| Branch | Purpose |
-| --- | --- |
-| [`chat-all-models`](https://github.com/asdkazmi/woiceai-ai/tree/chat-all-models) | Primary RunPod chat, embedding, and retrieval backend. Its build context is `chat-service/`. |
-| [`dev-woiceai-kb`](https://github.com/asdkazmi/woiceai-ai/tree/dev-woiceai-kb) | AWS Lambda knowledge-base worker for document processing, media dispatch, indexing, and deletion. |
-| [`dev-scrapper`](https://github.com/asdkazmi/woiceai-ai/tree/dev-scrapper) | AWS Lambda website scraper used for page extraction and depth-based crawling. |
-| [`dev-woiceai-chat`](https://github.com/asdkazmi/woiceai-ai/tree/dev-woiceai-chat) | Legacy/compatibility chat service, still referenced by the current web source for third-party model connectors and API-key validation. |
-
-The AI repository’s `main` branch does not contain the latest version of every service. Follow the [deployment documentation](https://woiceai.github.io/docs/setup/README.html) when selecting branches and configuring the complete system.
+| [web/](web/README.md) | React frontend and Express API |
+| [chat-service/](chat-service/README.md) | RunPod chat, retrieval, and embeddings |
+| [indexer/](indexer/README.md) | AWS Lambda ingestion and knowledge base lifecycle |
+| [scraper/](scraper/README.md) | AWS Lambda website extraction and crawling |
+| [audio-transcriber/](audio-transcriber/README.md) | RunPod audio transcription and speaker diarization |
+| [vision-service/](vision-service/README.md) | RunPod image and video analysis and video transcription |
 
 ## How it works
 

@@ -1,0 +1,75 @@
+.chat-ai-modal {
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.chat-ai-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.chat-ai-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.chat-ai-form .form-group label {
+  font-weight: 500;
+  color: #333;
+}
+
+.chat-ai-form .form-group input[type="text"],
+.chat-ai-form .form-group input[type="number"],
+.chat-ai-form .form-group select,
+.chat-ai-form .form-group textarea {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.chat-ai-form .form-group textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.chat-ai-form .form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.chat-ai-form .checkbox-group {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chat-ai-form .checkbox-group input[type="checkbox"] {
+  width: auto;
+}
+
+.settings-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.settings-section h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  color: #555;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+

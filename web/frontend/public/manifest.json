@@ -1,0 +1,20 @@
+{
+  "short_name": "Woice AI",
+  "name": "Woice AI",
+  "icons": [
+    {
+      "src": "woice.ai-2.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "woice.ai-2.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+}
