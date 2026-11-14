@@ -34,7 +34,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-The local service listens on `POST /scrapper` at port `5000`. The endpoint name remains `scrapper` for compatibility with the existing Lambda handler.
+The local service listens on `POST /scraper` at port `5000`.
 
 ## Build and deploy
 

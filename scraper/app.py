@@ -24,7 +24,7 @@ class Scrap(Resource):
 
 
 # Add the resource to the API
-api.add_resource(Scrap, '/scrapper')
+api.add_resource(Scrap, '/scraper')
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
