@@ -1,49 +1,28 @@
-This is runpod server less api which works on explaining vision whether its an image or a video.
+# Vision service
 
-This api can take one of these four inputs
+This RunPod worker describes images and video frames, transcribes speech from video, and can index the resulting text in MongoDB using embeddings from a separate RunPod endpoint.
 
-1.
-   _{
-        "url":"Your provided url for video",
-        "type": "video",
-        "delay": 5
-    }_
+## Models and build
 
-2.
-   _{
-        "url":"Your provided url for image",
-        "type": "image"
-        "delay": 9
-    }_
+Build from this directory on a host that can reach Hugging Face. The Dockerfile uses Python 3.11 and CUDA 12.2 and downloads Qwen2.5-VL-7B-Instruct for visual analysis and Distil-Whisper large-v3 for speech transcription. The image includes their weights. [Qwen vision model](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct) · [Distil-Whisper model](https://huggingface.co/distil-whisper/distil-large-v3)
 
-2.
-   _{
-        "s3_key":"s3_key for video",
-        "type": "video"
-        "delay": 7
-    }_
-2.
-   _{
-        "s3_key":"s3_key for image",
-        "type": "image"
-        "delay": 10
-    }_
+The Dockerfile expects a local `.env` file in the build context. Create an empty file if one is absent and supply actual credentials at runtime.
 
-`delay` is the duration (in seconds) that determines how long to wait between displaying each frame in the video or animation.
+```bash
+touch .env
+docker build -t woiceai-vision-service .
+```
 
-This api gets one of these inputs. 
+## Runtime configuration
 
-If type is image then it loads image from url or dwnload from s3_key whatever is provided and processes image using model **"cyan2k/molmo-7B-D-bnb-4bit"** and generates text for the image and return text as 
-_results = {
-                "text": text,
-            }_
+Use [.env.template](.env.template) as a checklist. Set `ACCESS_KEY`, `SECRET_KEY`, and `BUCKET_NAME` for S3 media and `TOPIC_ARN` for SNS status updates. Configure `DB_URI`, `RUNPOD_API_KEY`, and `RUNPOD_BASE_URL` for indexing, plus `RUNPOD_API_COST_PER_SECOND` and `COST_PER_3GB_MILLISECOND` for usage calculations.
 
-If type is video then it downloads video from s3_key or url whatever is provided. Then,  captures screen of video after every delay seconds (which you have provided in delay parameter and by default is 10 seconds) and stores all the screens in an array.
-Then processes all the screens of the array using model **"cyan2k/molmo-7B-D-bnb-4bit"** and generates text for all screens
-This text will be for approximately whole video.
-THen if video has audio, it converts video into audio and transcribes audio using **"distil-whisper/distil-large-v3"** and generates transcript.
-Then this api will return text of all screens with time in text parameter and transcript in transcript parameter as
-_results = {
-                "text": processed_screens,
-                "transcription": audio_of_video
-            }_
+## Run locally or deploy
+
+On an NVIDIA GPU host with GPU-enabled Docker, supply a separate private runtime env file containing `KEY=value` entries.
+
+```bash
+docker run --rm --gpus all --env-file /path/to/vision-runtime.env -p 8000:8000 woiceai-vision-service python -u /app.py --rp_serve_api --rp_api_host 0.0.0.0
+```
+
+Use [src/test_input.json](src/test_input.json) as a request example. Replace its sample values for your environment. For deployment, push the image to a registry and select it in a GPU RunPod Serverless endpoint with enough memory for both models. Set the runtime variables on the endpoint.
